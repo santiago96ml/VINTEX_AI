@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    /* Usamos tus colores exactos */
+    @apply bg-tech-black text-gray-main font-sans antialiased overflow-x-hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display text-white;
+  }
+}
+
+@layer utilities {
+  .text-neon-gradient {
+    /* CORREGIDO: Coincide con 'cyber-gradient' de tu config */
+    @apply bg-cyber-gradient bg-clip-text text-transparent;
+  }
+  
+  /* Clase utilitaria para bordes brillantes sutiles */
+  .border-glow {
+    @apply border border-white/10 hover:border-neon-main/50 transition-colors duration-300;
+  }
+}
