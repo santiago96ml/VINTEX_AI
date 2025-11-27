@@ -1,47 +1,58 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
+
+// Layout & UI
 import { ParticleNetwork } from './components/canvas/ParticleNetwork';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
-import { Hero } from './features/landing/Hero';
-import { TrustedBy } from './features/landing/TrustedBy';
-import { ComparisonSection } from './features/landing/ComparisonSection';
-import { FeaturesGrid } from './features/landing/FeaturesGrid';
-import { StartTrial } from './features/landing/StartTrial';
 
-// Nota: DashboardPreview y Pricing se mantienen o eliminan según necesidad estricta, 
-// aquí priorizo lo solicitado explícitamente en el prompt actual.
+// Pages
+import { Home } from './pages/Home';
+import { Solutions } from './pages/Solutions';
+import { Technology } from './pages/Technology';
+import { SuccessStories } from './pages/SuccessStories';
+import { Login } from './pages/Login';
+import { Demo } from './pages/Demo';
+
+// Componente para scroll top al cambiar de ruta
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  React.useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+};
 
 function App() {
   return (
-    <main className="relative bg-tech-black text-gray-main min-h-screen font-sans selection:bg-neon-main selection:text-black overflow-x-hidden">
-      
-      {/* 1. Capa Fondo Canvas (Lightweight) */}
-      <ParticleNetwork />
-      
-      {/* 2. Navegación Sticky */}
-      <Navbar />
-      
-      <div className="relative z-10 flex flex-col gap-0">
+    <Router>
+      <ScrollToTop />
+      <main className="relative bg-tech-black text-gray-main min-h-screen font-sans selection:bg-neon-main selection:text-black overflow-x-hidden">
         
-        {/* Hero Masivo */}
-        <Hero />
+        {/* Fondo Global */}
+        <ParticleNetwork />
         
-        {/* Logos/Trust */}
-        <TrustedBy />
+        {/* Navegación Global */}
+        <Navbar />
         
-        {/* Tabla Comparativa (Red vs Green) */}
-        <ComparisonSection />
-        
-        {/* Grid de 6 Servicios (Nina Structure) */}
-        <FeaturesGrid />
-        
-        {/* Formulario de Captura Final */}
-        <StartTrial />
-        
+        {/* Sistema de Rutas con Animaciones de Salida/Entrada */}
+        <AnimatePresence mode="wait">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/soluciones" element={<Solutions />} />
+            <Route path="/tecnologia" element={<Technology />} />
+            <Route path="/casos-exito" element={<SuccessStories />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/demo" element={<Demo />} />
+          </Routes>
+        </AnimatePresence>
+
+        {/* Footer Global (Opcional: podrías ocultarlo en Login) */}
         <Footer />
         
-      </div>
-    </main>
+      </main>
+    </Router>
   );
 }
 
