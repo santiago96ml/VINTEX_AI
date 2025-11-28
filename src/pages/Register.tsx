@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Loader2 } from 'lucide-react';
+import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { SocialButtons } from '../features/auth/SocialButtons';
 
@@ -43,7 +43,6 @@ export const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen pt-10 flex items-center justify-center p-4 relative overflow-hidden bg-tech-black">
-      
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-neon-main/5 rounded-full blur-[150px] -z-10" />
 
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-[450px]">
@@ -69,9 +68,7 @@ export const Register: React.FC = () => {
             <div className="relative group">
                <Mail className="absolute left-5 top-4 text-gray-500 group-focus-within:text-white transition-colors" size={20} />
                <input 
-                 name="email" 
-                 type="email" 
-                 required 
+                 name="email" type="email" required 
                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm"
                  placeholder="Correo electrónico"
                />
@@ -80,9 +77,7 @@ export const Register: React.FC = () => {
             <div className="relative group">
                <Lock className="absolute left-5 top-4 text-gray-500 group-focus-within:text-white transition-colors" size={20} />
                <input 
-                 name="password" 
-                 type="password" 
-                 required 
+                 name="password" type="password" required 
                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm"
                  placeholder="Contraseña"
                />
