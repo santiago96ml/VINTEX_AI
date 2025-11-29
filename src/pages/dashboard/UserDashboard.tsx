@@ -1,542 +1,497 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  LayoutDashboard, Calendar as CalendarIcon, Users, Settings, 
-  MessageSquare, TrendingUp, Clock, UserCheck, AlertCircle, 
-  MoreVertical, Smartphone, Search, CheckCircle2, 
-  XCircle, PauseCircle, Zap
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
-} from 'recharts';
-// CORRECCIÓN 1: Ajuste de rutas (asumiendo que estás en src/pages)
+import React, { useState, useEffect, useCallback } from 'react';
+// ELIMINADO: import { supabase } ... (Ya no conectamos directo, usamos tu Backend)
 import { GlassCard } from '../../components/ui/GlassCard';
-import { cn } from '../../lib/utils';
+import { Navbar } from '../../components/layout/Navbar';
 
 // --- TIPOS DE DATOS ---
-type EstadoCita = 'confirmada' | 'pendiente' | 'cancelada' | 'sala_espera' | 'finalizada';
-type EstadoTratamiento = 'lead' | 'contactado' | 'agendado' | 'tratamiento' | 'recuperacion';
-
-interface Paciente {
-  id: string;
+interface Doctor {
+  id: number;
   nombre: string;
-  telefono: string;
-  email: string;
-  estado_tratamiento: EstadoTratamiento;
-  ltv: number; 
-  ultima_interaccion: string;
+  especialidad: string;
+  horario_inicio: string;
+  horario_fin: string;
+  activo: boolean;
+  color?: string;
 }
 
 interface Cita {
-  id: string;
-  pacienteId: string;
-  doctor: string;
-  fecha: string;
-  hora: string;
-  duracion: number;
-  tipo: string;
-  estado: EstadoCita;
-  monto: number;
+  id: number;
+  doctor_id: number;
+  cliente_id: number;
+  fecha_hora: string;
+  duracion_minutos: number;
+  estado: string;
+  // Tu backend devuelve estos objetos anidados gracias al join
+  cliente: { nombre: string; telefono: string } | null; 
+  doctor: { nombre: string } | null;
 }
 
-// --- DATOS MOCK ---
-const MOCK_PACIENTES: Paciente[] = [
-  { id: '1', nombre: 'María Gómez', telefono: '+54911...', email: 'maria@mail.com', estado_tratamiento: 'agendado', ltv: 1200, ultima_interaccion: 'Hoy, 09:00' },
-  { id: '2', nombre: 'Juan Pérez', telefono: '+54911...', email: 'juan@mail.com', estado_tratamiento: 'contactado', ltv: 0, ultima_interaccion: 'Ayer, 14:30' },
-  { id: '3', nombre: 'Carlos Ruiz', telefono: '+54911...', email: 'carlos@mail.com', estado_tratamiento: 'lead', ltv: 0, ultima_interaccion: 'Hace 2h' },
-  { id: '4', nombre: 'Ana López', telefono: '+54911...', email: 'ana@mail.com', estado_tratamiento: 'recuperacion', ltv: 4500, ultima_interaccion: 'Hace 3d' },
-  { id: '5', nombre: 'Pedro S.', telefono: '+54911...', email: 'pedro@mail.com', estado_tratamiento: 'tratamiento', ltv: 850, ultima_interaccion: 'Hace 1h' },
-];
+interface Paciente {
+  id: number;
+  nombre: string;
+  dni: string;
+  telefono: string;
+  activo: boolean;
+  solicitud_de_secretaria?: boolean; // Opcional porque viene de la DB como 'solicitud_de_secretaría'
+}
 
-const MOCK_CITAS: Cita[] = [
-  { id: '101', pacienteId: '1', doctor: 'Dr. Usuario', fecha: new Date().toISOString().split('T')[0], hora: '09:00', duracion: 30, tipo: 'Consulta General', estado: 'confirmada', monto: 5000 },
-  { id: '102', pacienteId: '2', doctor: 'Dr. Usuario', fecha: new Date().toISOString().split('T')[0], hora: '10:30', duracion: 60, tipo: 'Limpieza', estado: 'pendiente', monto: 8000 },
-  { id: '103', pacienteId: '4', doctor: 'Dr. Usuario', fecha: new Date().toISOString().split('T')[0], hora: '14:00', duracion: 45, tipo: 'Control', estado: 'sala_espera', monto: 0 },
-  { id: '104', pacienteId: '5', doctor: 'Dr. Usuario', fecha: new Date().toISOString().split('T')[0], hora: '16:00', duracion: 60, tipo: 'Ortodoncia', estado: 'cancelada', monto: 15000 },
-];
+interface SidebarButtonProps {
+    active: boolean;
+    onClick: () => void;
+    icon: string;
+    label: string;
+    notification?: boolean;
+}
 
-// --- UTILS ---
-const getStatusColor = (status: EstadoCita) => {
-  switch (status) {
-    case 'confirmada': return 'text-neon-main bg-neon-main/10 border-neon-main/30';
-    case 'pendiente': return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30';
-    case 'cancelada': return 'text-red-500 bg-red-500/10 border-red-500/30 opacity-70';
-    case 'sala_espera': return 'text-blue-400 bg-blue-400/10 border-blue-400/30 animate-pulse';
-    default: return 'text-gray-400 bg-white/5';
-  }
-};
+// --- CONFIGURACIÓN API ---
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'; // Puerto 3001 según tu doc
 
-const formatMoney = (amount: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
-
-// ==========================================
-// 1. VISTA DE PILOTO (HOME)
-// ==========================================
-const PilotView = () => {
-  const ingresosTotal = useMemo(() => MOCK_CITAS.filter(c => c.estado !== 'cancelada').reduce((acc, curr) => acc + curr.monto, 0), []);
-  // Asumiendo 8 turnos diarios para el cálculo de ocupación
-  const ocupacion = Math.round((MOCK_CITAS.filter(c => c.estado === 'confirmada').length / 8) * 100); 
+// CORRECCIÓN DE IMPORTACIÓN: Exportación nombrada para coincidir con App.tsx
+export const UserDashboard = () => {
   
-  const chartData = [
-    { name: 'Lun', leads: 4, confirmados: 2 },
-    { name: 'Mar', leads: 3, confirmados: 1 },
-    { name: 'Mié', leads: 7, confirmados: 5 },
-    { name: 'Jue', leads: 5, confirmados: 4 },
-    { name: 'Vie', leads: 9, confirmados: 8 },
-    { name: 'Sáb', leads: 2, confirmados: 2 },
-    { name: 'Dom', leads: 1, confirmados: 0 },
-  ];
+  // --- ESTADO GLOBAL ---
+  const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes' | 'doctores'>('agenda');
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
 
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <GlassCard className="!p-5 border-l-4 border-l-neon-main flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">Ingresos Proyectados</p>
-              <h3 className="text-3xl font-display font-bold text-white tracking-tight">{formatMoney(ingresosTotal)}</h3>
-            </div>
-            <div className="p-2 bg-neon-main/10 rounded-lg text-neon-main"><TrendingUp size={20} /></div>
-          </div>
-          <div className="mt-2 text-xs text-green-400 font-medium">+14% vs mes anterior</div>
-        </GlassCard>
-        
-        <GlassCard className="!p-5 border-l-4 border-l-blue-500 flex flex-col justify-between">
-           <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">Ocupación Hoy</p>
-              <h3 className="text-3xl font-display font-bold text-white tracking-tight">{ocupacion}%</h3>
-            </div>
-            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Clock size={20} /></div>
-          </div>
-           <div className="mt-2 text-xs text-gray-500">4 espacios libres</div>
-        </GlassCard>
+  // --- DATOS DE LA CLÍNICA ---
+  const [doctores, setDoctores] = useState<Doctor[]>([]);
+  const [citas, setCitas] = useState<Cita[]>([]);
+  const [pacientes, setPacientes] = useState<Paciente[]>([]);
+  const [hasNotification, setHasNotification] = useState(false);
 
-        <GlassCard className="!p-5 border-l-4 border-l-purple-500 flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">Tiempo Ahorrado IA</p>
-              <h3 className="text-3xl font-display font-bold text-white tracking-tight">14hs</h3>
-            </div>
-            <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400"><Zap size={20} /></div>
-          </div>
-          <div className="mt-2 text-xs text-gray-500">Equivale a $45.000 en personal</div>
-        </GlassCard>
+  // --- ESTADO UI AGENDA ---
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDoctorId, setSelectedDoctorId] = useState<number | 'all'>('all');
 
-        <GlassCard className="!p-5 border-l-4 border-l-red-500 relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute -right-6 -top-6 bg-red-500/20 w-24 h-24 rounded-full blur-xl" />
-          <div className="flex justify-between items-start relative z-10">
-             <div>
-               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">Atención Requerida</p>
-               <h3 className="text-3xl font-display font-bold text-white tracking-tight">3 Leads</h3>
-             </div>
-             <div className="p-2 bg-red-500/10 rounded-lg text-red-400"><AlertCircle size={20} /></div>
-          </div>
-          <button className="mt-2 text-xs text-white bg-red-500/20 hover:bg-red-500/30 py-1 px-2 rounded border border-red-500/50 transition-colors w-fit">
-            Ver Pendientes
-          </button>
-        </GlassCard>
-      </div>
+  // --- ESTADO FORMULARIOS ---
+  const [showDocForm, setShowDocForm] = useState(false);
+  const [newDoc, setNewDoc] = useState({ nombre: '', especialidad: '' });
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* GRÁFICO CENTRAL */}
-        <div className="lg:col-span-2 h-full">
-          <GlassCard className="h-[400px] flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <TrendingUp size={18} className="text-neon-main"/> 
-                Rendimiento de Conversión
-              </h3>
-            </div>
-            <div className="flex-1 w-full h-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00ff99" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#00ff99" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorConf" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                  <XAxis dataKey="name" stroke="#666" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#666" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '8px' }}
-                    itemStyle={{ color: '#fff' }}
-                  />
-                  <Area type="monotone" dataKey="leads" stroke="#00ff99" strokeWidth={2} fillOpacity={1} fill="url(#colorLeads)" />
-                  <Area type="monotone" dataKey="confirmados" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorConf)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </GlassCard>
-        </div>
+  // --- FUNCIONES DE AYUDA API ---
+  const authFetch = useCallback(async (endpoint: string, options: RequestInit = {}) => {
+    if (!token) return null;
+    const res = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            ...options.headers,
+        }
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error en el servidor');
+    }
+    return res.json();
+  }, [token]);
 
-        {/* FEED DE ACTIVIDAD */}
-        <GlassCard className="h-[400px] flex flex-col">
-          <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_#22c55e]"/> Live Pulse
-          </h3>
-          <div className="flex-1 overflow-y-auto space-y-0 pr-1 custom-scrollbar">
-            {[
-              { type: 'success', msg: 'Turno confirmado con María Gómez', time: '2 min', icon: CheckCircle2 },
-              { type: 'warning', msg: 'Juan Pérez derivado a recepción (Pregunta compleja)', time: '15 min', icon: AlertCircle },
-              { type: 'info', msg: 'Recordatorio enviado a Pedro S.', time: '32 min', icon: MessageSquare },
-              { type: 'success', msg: 'Turno confirmado con Ana L.', time: '1h', icon: CheckCircle2 },
-              { type: 'error', msg: 'Cancelación: Carlos M. (Reprogramando...)', time: '2h', icon: XCircle },
-              { type: 'ia', msg: 'IA está negociando horario con Nuevo Lead', time: 'ahora', icon: Zap },
-            ].map((log, i) => (
-              <div key={i} className="flex gap-3 items-start p-3 hover:bg-white/5 rounded-lg transition-colors group cursor-default border-b border-white/5 last:border-0">
-                <div className={`mt-0.5 p-1.5 rounded-md shrink-0 ${
-                  log.type === 'success' ? 'bg-green-500/10 text-green-500' : 
-                  log.type === 'warning' ? 'bg-yellow-500/10 text-yellow-500' : 
-                  log.type === 'error' ? 'bg-red-500/10 text-red-500' : 
-                  log.type === 'ia' ? 'bg-neon-main/10 text-neon-main animate-pulse' :
-                  'bg-blue-500/10 text-blue-500'
-                }`}>
-                  <log.icon size={14} />
-                </div>
-                <div>
-                  <p className="text-gray-300 text-xs leading-snug group-hover:text-white transition-colors">{log.msg}</p>
-                  <span className="text-[10px] text-gray-600 font-mono">{log.time}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </GlassCard>
-      </div>
-    </div>
-  );
-};
+  // --- CARGA DE DATOS (Conectado al Backend server.js) ---
+  const fetchData = useCallback(async () => {
+    if (!token) return;
 
-// ==========================================
-// 2. AGENDA VISUAL
-// ==========================================
-const AgendaModule = () => {
-  return (
-    <div className="space-y-6 animate-in fade-in zoom-in duration-300 h-full flex flex-col">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Agenda Inteligente</h2>
-          <p className="text-xs text-gray-500">Gestionada por Vintex AI</p>
-        </div>
-        <div className="flex items-center gap-4">
-             <div className="bg-black/30 p-1 rounded-lg border border-white/10 flex text-xs">
-                <button className="px-3 py-1.5 bg-white/10 text-white rounded shadow">Día</button>
-                <button className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors">Semana</button>
-                <button className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors">Lista</button>
-             </div>
-             <button className="bg-neon-main text-black text-xs font-bold px-4 py-2 rounded hover:bg-neon-dark transition-colors">
-               + Agendar Manual
-             </button>
-        </div>
-      </div>
-
-      <GlassCard className="flex-1 overflow-hidden flex flex-col !p-0">
-        <div className="flex border-b border-white/10 p-4 bg-white/5">
-             <div className="w-16 text-center text-xs text-gray-400 font-mono pt-1">HORA</div>
-             <div className="flex-1 pl-4 text-xs text-gray-400 font-mono pt-1">PACIENTE & DETALLES</div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2 relative">
-           <div className="absolute left-0 right-0 top-[180px] border-t border-red-500/50 z-10 flex items-center pointer-events-none">
-               <span className="bg-red-500 text-white text-[10px] px-1 rounded-r font-bold">AHORA</span>
-           </div>
-
-           {['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '14:00', '15:00', '16:00'].map((time) => {
-              const cita = MOCK_CITAS.find(c => c.hora === time);
-              return (
-                <div key={time} className="flex gap-4 min-h-[80px] group relative">
-                   <div className="w-16 text-right text-xs text-gray-600 font-mono pt-2">{time}</div>
-                   <div className="flex-1 border-t border-white/5 relative pt-1">
-                      {cita ? (
-                        <motion.div 
-                           initial={{ opacity: 0, x: -10 }}
-                           animate={{ opacity: 1, x: 0 }}
-                           className={cn(
-                               "absolute top-1 left-0 right-4 rounded-lg p-3 border flex justify-between items-center cursor-pointer hover:brightness-110 transition-all shadow-lg z-10",
-                               getStatusColor(cita.estado)
-                           )}
-                           style={{ height: `${(cita.duracion / 30) * 80 - 10}px` }} 
-                        >
-                           <div className="flex items-start gap-3">
-                               <div className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center text-xs font-bold">
-                                   {cita.pacienteId}
-                               </div>
-                               <div>
-                                   <h4 className="text-sm font-bold leading-none mb-1">{MOCK_PACIENTES.find(p => p.id === cita.pacienteId)?.nombre}</h4>
-                                   <p className="text-[10px] opacity-80 flex items-center gap-1"><Smartphone size={10}/> {cita.tipo}</p>
-                               </div>
-                           </div>
-                           <div className="flex items-center gap-2">
-                               <span className="text-[10px] font-mono bg-black/20 px-2 py-1 rounded">{cita.duracion} min</span>
-                               <button className="p-1.5 hover:bg-black/20 rounded text-current"><MessageSquare size={14} /></button>
-                               <button className="p-1.5 hover:bg-black/20 rounded text-current"><MoreVertical size={14} /></button>
-                           </div>
-                        </motion.div>
-                      ) : (
-                        <div className="h-full w-full hover:bg-white/5 rounded-lg transition-colors -mt-1 border border-transparent hover:border-white/5 border-dashed flex items-center justify-center opacity-0 hover:opacity-100 cursor-pointer">
-                           <span className="text-xs text-gray-500">+ Disponible</span>
-                        </div>
-                      )}
-                   </div>
-                </div>
-              )
-           })}
-        </div>
-      </GlassCard>
-    </div>
-  );
-};
-
-// ==========================================
-// 3. CRM DE PACIENTES
-// ==========================================
-const CRMModule = () => {
-  // CORRECCIÓN 2: Tipado estricto para las columnas
-  const columns: { id: EstadoTratamiento, title: string, color: string }[] = [
-    { id: 'lead', title: 'Nuevos Leads', color: 'border-blue-500' },
-    { id: 'contactado', title: 'Contactados', color: 'border-yellow-500' },
-    { id: 'agendado', title: 'Agendados', color: 'border-neon-main' },
-    { id: 'tratamiento', title: 'En Tratamiento', color: 'border-purple-500' },
-    { id: 'recuperacion', title: 'Recuperación', color: 'border-pink-500' },
-  ];
-
-  return (
-    <div className="h-full flex flex-col animate-in fade-in zoom-in duration-300">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-white">Pipeline de Pacientes</h2>
-        <div className="flex gap-3">
-            <div className="relative">
-                <Search className="absolute left-3 top-2.5 text-gray-500" size={14} />
-                <input type="text" placeholder="Buscar paciente..." className="bg-black/30 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white w-48 focus:border-neon-main outline-none"/>
-            </div>
-            <button className="bg-neon-main text-black px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 hover:bg-neon-dark">
-                <Users size={14}/> Nuevo Paciente
-            </button>
-        </div>
-      </div>
+    try {
+      // 1. Cargar Datos Iniciales (Doctores y Pacientes desde tu endpoint optimizado)
+      // Usamos el endpoint '/api/initial-data' definido en server.js
+      const initialData = await authFetch('/initial-data');
       
-      <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-4 min-w-max h-full pb-4">
-          {columns.map((col) => {
-            const items = MOCK_PACIENTES.filter(p => p.estado_tratamiento === col.id);
-            return (
-              <div key={col.id} className="w-[280px] flex flex-col h-full">
-                <div className={`flex justify-between items-center mb-3 pb-2 border-b-2 ${col.color}`}>
-                   <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">{col.title}</span>
-                   <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-gray-400">{items.length}</span>
-                </div>
-                
-                <div className="flex-1 bg-white/5 rounded-xl p-2 space-y-2 overflow-y-auto custom-scrollbar border border-white/5">
-                   {items.map(patient => (
-                     <motion.div 
-                        whileHover={{ scale: 1.02 }}
-                        key={patient.id} 
-                        className="bg-[#151515] p-3 rounded-lg border border-white/5 hover:border-white/20 shadow-sm cursor-grab active:cursor-grabbing group"
-                     >
-                        <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-[10px] font-bold text-white">
-                                    {patient.nombre.charAt(0)}
-                                </div>
-                                <span className="text-sm font-medium text-gray-200">{patient.nombre}</span>
-                            </div>
-                            {patient.ltv > 1000 && <span className="text-[8px] bg-neon-main/10 text-neon-main px-1.5 py-0.5 rounded border border-neon-main/20">VIP</span>}
-                        </div>
-                        
-                        <div className="space-y-1.5">
-                            <div className="text-[10px] text-gray-500 flex items-center gap-1">
-                                <Clock size={10}/> {patient.ultima_interaccion}
-                            </div>
-                            <div className="text-[10px] text-gray-500 flex items-center gap-1">
-                                <LayoutDashboard size={10}/> LTV: ${patient.ltv}
-                            </div>
-                        </div>
+      if (initialData) {
+         setDoctores(initialData.doctores || []);
+         // Tu backend devuelve 'clientes', lo mapeamos a 'pacientes'
+         setPacientes(initialData.clientes || []);
+         
+         // Verificamos la notificación de secretaría (según tu lógica de base de datos)
+         const notif = initialData.clientes?.some((p: any) => p.solicitud_de_secretaria || p.solicitud_de_secretaría);
+         setHasNotification(!!notif);
+      }
 
-                        <div className="mt-3 pt-2 border-t border-white/5 flex justify-between opacity-60 group-hover:opacity-100 transition-opacity">
-                            <button className="text-[10px] text-neon-main hover:underline flex items-center gap-1">
-                                <MessageSquare size={10}/> Chat IA
-                            </button>
-                            <button className="text-[10px] text-gray-400 hover:text-white">Ver Ficha</button>
-                        </div>
-                     </motion.div>
-                   ))}
-                   <button className="w-full py-2 text-xs text-gray-500 hover:bg-white/5 rounded border border-dashed border-white/10 hover:border-white/20 transition-all">
-                       + Añadir
-                   </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
+      // 2. Cargar Citas (Endpoint '/api/citas' del server.js)
+      // Tu backend ya hace los joins con clientes y doctores
+      const citasData = await authFetch('/citas');
+      if (citasData) {
+          setCitas(citasData);
+      }
 
-// ==========================================
-// 4. CONFIGURACIÓN IA
-// ==========================================
-const ConfigModule = () => {
-    const [mode, setMode] = useState<'auto' | 'hybrid' | 'off'>('auto');
+    } catch (error: any) {
+      console.error("Error cargando datos del Backend:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, authFetch]);
 
-    return (
-        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                <Settings className="text-neon-main" /> Configuración del Cerebro
-            </h2>
+  // --- CICLO DE VIDA ---
+  
+  // 1. Obtener Token (Simulado desde LocalStorage o Contexto de Auth)
+  useEffect(() => {
+      // Asumiendo que guardaste el token al hacer login
+      const storedToken = localStorage.getItem('token') || localStorage.getItem('sb-access-token'); 
+      // NOTA: Ajusta la key según cómo guardes el token en Login.tsx
+      if (storedToken) {
+          setToken(storedToken);
+      } else {
+          // Si no hay token, redirigir o manejar error
+          console.warn("No hay token de autenticación");
+          setLoading(false);
+      }
+  }, []);
 
-            <GlassCard className="mb-8 !p-8 border-neon-main/20">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div>
-                        <h3 className="text-lg font-bold text-white mb-2">Modo de Operación</h3>
-                        <p className="text-sm text-gray-400 max-w-md">Define cuánta autonomía tiene Vintex AI sobre tu agenda.</p>
-                    </div>
-                    <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
-                        <button 
-                            onClick={() => setMode('auto')}
-                            className={cn(
-                                "px-6 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all",
-                                mode === 'auto' ? "bg-neon-main text-black shadow-[0_0_20px_rgba(0,255,153,0.3)]" : "text-gray-400 hover:text-white"
-                            )}
-                        >
-                            <Zap size={16} /> Automático
-                        </button>
-                        <button 
-                            onClick={() => setMode('hybrid')}
-                            className={cn(
-                                "px-6 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all",
-                                mode === 'hybrid' ? "bg-yellow-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.3)]" : "text-gray-400 hover:text-white"
-                            )}
-                        >
-                            <UserCheck size={16} /> Híbrido
-                        </button>
-                        <button 
-                            onClick={() => setMode('off')}
-                            className={cn(
-                                "px-6 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all",
-                                mode === 'off' ? "bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.3)]" : "text-gray-400 hover:text-white"
-                            )}
-                        >
-                            <PauseCircle size={16} /> Pausado
-                        </button>
-                    </div>
-                </div>
-            </GlassCard>
+  // 2. Polling de Datos (Cada 10s consulta al Backend)
+  useEffect(() => {
+    if (token) {
+      fetchData();
+      const interval = setInterval(fetchData, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [token, fetchData]);
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <GlassCard className="!p-6">
-                    <h4 className="font-bold text-white mb-4 flex items-center gap-2"><CalendarIcon size={16} className="text-blue-400"/> Reglas de Agenda</h4>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between pb-4 border-b border-white/5">
-                            <div>
-                                <p className="text-sm text-gray-200">Límite de Duración (Viernes)</p>
-                                <p className="text-xs text-gray-500">No agendar citas {'>'} 1 hora</p>
-                            </div>
-                            <div className="w-10 h-5 bg-neon-main rounded-full relative cursor-pointer"><div className="absolute right-1 top-1 w-3 h-3 bg-black rounded-full"/></div>
-                        </div>
-                        <div className="flex items-center justify-between pb-4 border-b border-white/5">
-                            <div>
-                                <p className="text-sm text-gray-200">Bloqueo Vacaciones</p>
-                                <p className="text-xs text-gray-500">Dr. Usuario fuera 1-15 Enero</p>
-                            </div>
-                            <div className="w-10 h-5 bg-gray-700 rounded-full relative cursor-pointer"><div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full"/></div>
-                        </div>
-                    </div>
-                </GlassCard>
 
-                <GlassCard className="!p-6">
-                    <h4 className="font-bold text-white mb-4 flex items-center gap-2"><MessageSquare size={16} className="text-purple-400"/> Personalidad del Bot</h4>
-                    <div className="space-y-4">
-                         <div className="space-y-2">
-                            <label className="text-xs text-gray-400">Tono de Voz</label>
-                            <select className="w-full bg-black/30 border border-white/10 rounded p-2 text-sm text-white outline-none focus:border-neon-main">
-                                <option>Profesional y Empático (Recomendado)</option>
-                                <option>Directo y Eficiente</option>
-                                <option>Amigable y Casual</option>
-                            </select>
-                         </div>
-                         <div className="space-y-2">
-                            <label className="text-xs text-gray-400">Tiempo de Espera antes de responder</label>
-                            <input type="range" className="w-full accent-neon-main" />
-                            <div className="flex justify-between text-[10px] text-gray-500"><span>Inmediato</span><span>2 min (Natural)</span></div>
-                         </div>
-                    </div>
-                </GlassCard>
-            </div>
-        </div>
-    )
-}
+  // --- ACCIONES (Conectadas al Backend) ---
 
-// --- DASHBOARD PRINCIPAL ---
-export const UserDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'home' | 'agenda' | 'crm' | 'config'>('home');
+  const handleCreateDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
 
-  const NavItem = ({ id, icon: Icon, label }: { id: typeof activeTab, icon: React.ElementType, label: string }) => (
-    <button 
-      onClick={() => setActiveTab(id)}
-      className={cn(
-        "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 mb-1",
-        activeTab === id 
-          ? 'bg-neon-main text-black font-bold shadow-[0_0_15px_rgba(0,255,153,0.4)]' 
-          : 'text-gray-400 hover:bg-white/5 hover:text-white'
-      )}
-    >
-      <Icon size={20} />
-      <span className="text-sm">{label}</span>
-    </button>
-  );
+    try {
+        // POST a tu backend /api/doctores
+        await authFetch('/doctores', {
+            method: 'POST',
+            body: JSON.stringify({
+                nombre: newDoc.nombre,
+                especialidad: newDoc.especialidad,
+                horario_inicio: '09:00', // Formato HH:MM validado por Zod en backend
+                horario_fin: '18:00',
+                color: '#00ff9f' // Color por defecto requerido por tu esquema Zod
+            })
+        });
+
+        setShowDocForm(false);
+        setNewDoc({ nombre: '', especialidad: '' });
+        fetchData(); // Recargar datos
+    } catch (error: any) {
+        alert("Error al crear doctor: " + error.message);
+    }
+  };
+
+  const toggleBotStatus = async (paciente: Paciente) => {
+    // Actualización optimista UI
+    const updatedPacientes = pacientes.map(p => 
+        p.id === paciente.id ? { ...p, activo: !p.activo } : p
+    );
+    setPacientes(updatedPacientes);
+
+    try {
+        // PATCH a tu backend /api/clients/:id (Nota: server.js usa 'clientes', asegúrate de la ruta)
+        // Según server.js línea 227 la ruta es /api/clientes/:id
+        await authFetch(`/clientes/${paciente.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ activo: !paciente.activo })
+        });
+    } catch (error) {
+        console.error("Error actualizando bot:", error);
+        fetchData(); // Revertir si falla
+    }
+  };
+
+  // --- HELPERS AGENDA ---
+  const changeDate = (days: number) => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + days);
+    setCurrentDate(newDate);
+  };
+
+  const getTimeSlots = () => {
+    const slots = [];
+    for (let i = 8; i < 19; i++) {
+      slots.push(`${i.toString().padStart(2, '0')}:00`);
+      slots.push(`${i.toString().padStart(2, '0')}:30`);
+    }
+    return slots;
+  };
+
+  const getAppointmentsForSlot = (docId: number, timeStr: string) => {
+    // Normalización de fechas para evitar problemas de zona horaria simples
+    const dateStr = currentDate.toISOString().split('T')[0];
+    
+    return citas.filter(c => {
+      if (c.doctor_id !== docId) return false;
+      
+      // El backend devuelve fecha ISO (ej: 2025-11-05T14:30:00Z)
+      const citaDate = new Date(c.fecha_hora);
+      const cDateStr = citaDate.toISOString().split('T')[0];
+      const cTimeStr = citaDate.toISOString().split('T')[1].substring(0, 5); // HH:MM
+      
+      return cDateStr === dateStr && cTimeStr === timeStr;
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-[#050505] flex overflow-hidden">
-      <aside className="w-64 border-r border-white/5 bg-black/40 backdrop-blur-xl fixed h-full z-20 hidden md:flex flex-col p-6">
-        <div className="mb-10 flex items-center gap-3 px-2">
-           <div className="w-8 h-8 bg-gradient-to-br from-neon-main to-teal-500 rounded-lg flex items-center justify-center font-bold text-black shadow-neon">V</div>
-           <span className="font-display font-bold text-white text-lg tracking-wide">VINTEX</span>
-        </div>
+    <div className="min-h-screen bg-[#0D0D0F] text-white font-sans selection:bg-[#00ff9f] selection:text-black">
+      <Navbar />
 
-        <div className="flex-1">
-          <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest mb-4 px-4">Principal</p>
-          <NavItem id="home" icon={LayoutDashboard} label="Vista de Piloto" />
-          <NavItem id="agenda" icon={CalendarIcon} label="Gestión de Turnos" />
-          <NavItem id="crm" icon={Users} label="CRM Pacientes" />
-          
-          <div className="my-6 border-t border-white/5 mx-4" />
-          
-          <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest mb-4 px-4">Sistema</p>
-          <NavItem id="config" icon={Settings} label="Configuración IA" />
-        </div>
-
-        <div className="mt-auto pt-6 border-t border-white/5">
-          <GlassCard className="!p-3 flex items-center gap-3 !bg-white/5 !border-0 cursor-pointer hover:!bg-white/10">
-            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-white font-bold">DR</div>
-            <div>
-              <p className="text-xs text-white font-bold">Dr. Usuario</p>
-              <p className="text-[10px] text-green-400 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/> Online</p>
+      <div className="pt-24 px-4 md:px-8 pb-12 max-w-7xl mx-auto flex flex-col md:flex-row gap-6 h-[calc(100vh-80px)]">
+        
+        {/* --- SIDEBAR --- */}
+        <aside className="w-full md:w-64 flex-shrink-0">
+          <GlassCard className="h-full p-4 flex flex-col gap-2 border border-white/5 bg-white/[0.02]">
+            <div className="mb-8 px-2 mt-2">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <i className="fas fa-bolt text-[#00ff9f]"></i> Clínica
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">Gestión Inteligente</p>
             </div>
+
+            <SidebarButton 
+              active={activeTab === 'agenda'} 
+              onClick={() => setActiveTab('agenda')} 
+              icon="📅" label="Agenda" 
+            />
+            
+            <SidebarButton 
+              active={activeTab === 'pacientes'} 
+              onClick={() => setActiveTab('pacientes')} 
+              icon="👥" label="Pacientes" 
+              notification={hasNotification}
+            />
+
+            <SidebarButton 
+              active={activeTab === 'doctores'} 
+              onClick={() => setActiveTab('doctores')} 
+              icon="👨‍⚕️" label="Doctores" 
+            />
           </GlassCard>
-        </div>
-      </aside>
+        </aside>
 
-      <div className="flex-1 md:ml-64 p-4 md:p-8 pt-24 md:pt-8 overflow-y-auto h-screen bg-tech-black bg-grid-white/[0.02]">
-        <header className="flex md:hidden justify-between items-center mb-6">
-           <div className="font-bold text-white flex items-center gap-2">
-             <div className="w-6 h-6 bg-neon-main rounded flex items-center justify-center text-black text-xs">V</div> VINTEX AI
-           </div>
-        </header>
+        {/* --- MAIN CONTENT --- */}
+        <main className="flex-1 overflow-hidden flex flex-col relative">
+           {loading && (
+              <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#00ff9f]"></div>
+              </div>
+            )}
 
-        <AnimatePresence mode="wait">
-            {activeTab === 'home' && <PilotView key="home" />}
-            {activeTab === 'agenda' && <AgendaModule key="agenda" />}
-            {activeTab === 'crm' && <CRMModule key="crm" />}
-            {activeTab === 'config' && <ConfigModule key="config" />}
-        </AnimatePresence>
+          <GlassCard className="flex-1 overflow-hidden flex flex-col p-0 border border-white/5 bg-white/[0.02]">
+            
+            {/* --- VISTA: AGENDA --- */}
+            {activeTab === 'agenda' && (
+              <div className="flex flex-col h-full">
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+                  <div className="flex items-center gap-4">
+                    <button onClick={() => changeDate(-1)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition">←</button>
+                    <h3 className="text-lg font-semibold capitalize">{currentDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
+                    <button onClick={() => changeDate(1)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition">→</button>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <select 
+                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:border-[#00ff9f] outline-none text-gray-300"
+                        value={selectedDoctorId}
+                        onChange={(e) => setSelectedDoctorId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                    >
+                        <option value="all">Todos los profesionales</option>
+                        {doctores.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+                    </select>
+                    <button className="bg-[#00ff9f] text-black font-semibold px-4 py-2 rounded-lg hover:bg-[#00cc80] transition shadow-[0_0_15px_rgba(0,255,159,0.3)]">
+                        + Cita
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-auto">
+                    <div className="flex min-w-[800px]">
+                        {/* Columna Horas */}
+                        <div className="w-20 sticky left-0 bg-[#0D0D0F] border-r border-white/10 z-20 flex-shrink-0">
+                            <div className="h-12 border-b border-white/10 bg-[#16171a]"></div> 
+                            {getTimeSlots().map(time => (
+                                <div key={time} className="h-24 border-b border-white/5 flex items-start justify-center pt-2 text-xs text-gray-500 font-mono">
+                                    {time}
+                                </div>
+                            ))}
+                        </div>
+
+                        {doctores.length === 0 && !loading && (
+                            <div className="p-8 text-gray-500 italic">No hay doctores registrados.</div>
+                        )}
+                        
+                        {doctores
+                            .filter(d => selectedDoctorId === 'all' || d.id === selectedDoctorId)
+                            .map(doctor => (
+                            <div key={doctor.id} className="flex-1 min-w-[200px] border-r border-white/5 bg-gradient-to-b from-transparent to-white/[0.01]">
+                                <div className="h-12 sticky top-0 bg-[#16171a]/90 backdrop-blur border-b border-white/10 flex items-center justify-center font-medium text-[#00ff9f] z-10 shadow-lg">
+                                    {doctor.nombre}
+                                </div>
+                                {getTimeSlots().map(time => {
+                                    const slotAppts = getAppointmentsForSlot(doctor.id, time);
+                                    return (
+                                        <div key={`${doctor.id}-${time}`} className="h-24 border-b border-white/5 p-1 relative group transition-colors hover:bg-white/[0.03]">
+                                            {slotAppts.map(appt => (
+                                                <div key={appt.id} className="absolute inset-x-1 top-1 bottom-1 bg-[#00ff9f]/10 border-l-2 border-[#00ff9f] p-2 rounded overflow-hidden hover:scale-[1.02] hover:shadow-lg hover:bg-[#00ff9f]/20 transition-all cursor-pointer z-10">
+                                                    <p className="font-bold text-xs text-[#00ff9f] truncate">{appt.cliente?.nombre || 'Cliente'}</p>
+                                                    <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${appt.estado === 'confirmada' ? 'bg-green-500' : 'bg-yellow-500'}`}></span> 
+                                                        {appt.estado}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                            
+                                            {/* Hover Add Button */}
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                <span className="text-[#00ff9f] text-xl">+</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+              </div>
+            )}
+
+            {/* --- VISTA: PACIENTES --- */}
+            {activeTab === 'pacientes' && (
+              <div className="flex flex-col h-full p-6">
+                <div className="flex justify-between items-end mb-6">
+                    <div>
+                        <h2 className="text-2xl font-bold text-white">Base de Pacientes</h2>
+                        <p className="text-sm text-gray-400 mt-1">Gestiona los usuarios y el estado del bot de IA.</p>
+                    </div>
+                    <input type="text" placeholder="Buscar por nombre o DNI..." className="bg-black/40 border border-white/10 rounded-lg px-4 py-2 w-72 focus:border-[#00ff9f] outline-none text-sm" />
+                </div>
+
+                <div className="flex-1 overflow-auto border border-white/10 rounded-xl bg-black/20">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="bg-white/5 sticky top-0 z-10 text-xs uppercase tracking-wider text-gray-400">
+                            <tr>
+                                <th className="p-4 font-semibold">Nombre</th>
+                                <th className="p-4 font-semibold">Teléfono</th>
+                                <th className="p-4 font-semibold">Estado IA</th>
+                                <th className="p-4 font-semibold text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {pacientes.map(paciente => (
+                                <tr key={paciente.id} className={`hover:bg-white/[0.02] transition-colors ${paciente.solicitud_de_secretaria ? 'bg-red-500/5' : ''}`}>
+                                    <td className="p-4 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xs font-bold">
+                                            {paciente.nombre.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">{paciente.nombre}</p>
+                                            {paciente.solicitud_de_secretaria && (
+                                                <span className="text-[10px] text-red-400 flex items-center gap-1 animate-pulse mt-0.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Solicita Atención
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="p-4 text-gray-400 text-sm font-mono">{paciente.telefono}</td>
+                                    <td className="p-4">
+                                        <button 
+                                            onClick={() => toggleBotStatus(paciente)}
+                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                                                paciente.activo 
+                                                ? 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20' 
+                                                : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/20'
+                                            }`}
+                                        >
+                                            {paciente.activo ? 'Bot Activo' : 'Pausado'}
+                                        </button>
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        <button className="text-[#00ff9f] hover:text-white text-sm font-medium transition-colors">Ver Chat</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+              </div>
+            )}
+
+            {/* --- VISTA: DOCTORES --- */}
+            {activeTab === 'doctores' && (
+                <div className="p-8 overflow-auto h-full">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-2xl font-bold">Gestión Médica</h2>
+                        <button onClick={() => setShowDocForm(!showDocForm)} className="border border-dashed border-white/30 px-4 py-2 rounded-lg hover:border-[#00ff9f] hover:text-[#00ff9f] transition text-sm">
+                            {showDocForm ? 'Cancelar' : '+ Nuevo Doctor'}
+                        </button>
+                    </div>
+
+                    {showDocForm && (
+                        <form onSubmit={handleCreateDoctor} className="mb-8 bg-white/5 p-6 rounded-xl border border-white/10 grid grid-cols-1 md:grid-cols-3 gap-4 items-end animate-in fade-in slide-in-from-top-4">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Nombre Completo</label>
+                                <input 
+                                    type="text" 
+                                    required 
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 focus:border-[#00ff9f] outline-none" 
+                                    value={newDoc.nombre} 
+                                    onChange={e => setNewDoc({...newDoc, nombre: e.target.value})} 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Especialidad</label>
+                                <input 
+                                    type="text" 
+                                    required 
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 focus:border-[#00ff9f] outline-none"
+                                    value={newDoc.especialidad} 
+                                    onChange={e => setNewDoc({...newDoc, especialidad: e.target.value})} 
+                                />
+                            </div>
+                            <button type="submit" className="bg-[#00ff9f] text-black font-bold py-2 rounded-lg hover:bg-[#00cc80] transition">Guardar Doctor</button>
+                        </form>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {doctores.map(doc => (
+                            <div key={doc.id} className="group bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 p-5 rounded-2xl hover:border-[#00ff9f]/30 transition-all hover:shadow-[0_0_20px_rgba(0,255,159,0.05)] relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-16 h-16 bg-[#00ff9f] blur-[50px] opacity-10 group-hover:opacity-20 transition-opacity"></div>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-xl">👨‍⚕️</div>
+                                    <div className={`w-2 h-2 rounded-full ${doc.activo ? 'bg-green-500 shadow-[0_0_5px_#22c55e]' : 'bg-gray-500'}`}></div>
+                                </div>
+                                <h3 className="font-bold text-lg text-white">{doc.nombre}</h3>
+                                <p className="text-[#00ff9f] text-sm mb-4">{doc.especialidad}</p>
+                                <div className="pt-4 border-t border-white/5 flex justify-between text-xs text-gray-500">
+                                    <span>Horario:</span>
+                                    <span className="text-gray-300 font-mono">
+                                        {doc.horario_inicio ? doc.horario_inicio.slice(0,5) : '--:--'} - {doc.horario_fin ? doc.horario_fin.slice(0,5) : '--:--'}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+          </GlassCard>
+        </main>
       </div>
     </div>
   );
 };
+
+// Componente Auxiliar
+const SidebarButton: React.FC<SidebarButtonProps> = ({ active, onClick, icon, label, notification }) => (
+  <button
+    onClick={onClick}
+    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-300 group ${
+      active 
+        ? 'bg-[#00ff9f]/10 text-[#00ff9f] border border-[#00ff9f]/20 shadow-[0_0_15px_rgba(0,255,159,0.1)]' 
+        : 'text-gray-400 hover:bg-white/5 hover:text-white border border-transparent'
+    }`}
+  >
+    <div className="flex items-center gap-3">
+        <span className="text-xl group-hover:scale-110 transition-transform">{icon}</span>
+        <span className="font-medium">{label}</span>
+    </div>
+    {notification && (
+        <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+        </span>
+    )}
+  </button>
+);
