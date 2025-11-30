@@ -8,7 +8,7 @@ export const StartTrial: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
 
   // URL de tu Backend (localhost para desarrollo)
-  const API_URL = 'http://localhost:3000/api';
+  const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host/';
 
   const benefits = [
     "Prueba gratuita de 14 días (Premium)",
