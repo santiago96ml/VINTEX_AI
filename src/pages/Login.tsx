@@ -9,6 +9,7 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
+  // Usar variable de entorno con fallback
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -23,7 +24,8 @@ export const Login: React.FC = () => {
     };
 
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      // Petición al Master
+      const response = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -33,9 +35,10 @@ export const Login: React.FC = () => {
 
       if (!response.ok) throw new Error(result.error || 'Credenciales inválidas');
 
+      // Guardar sesión y redirigir
       localStorage.setItem('vintex_session', JSON.stringify(result.session));
       localStorage.setItem('vintex_user', JSON.stringify(result.user));
-      navigate('/'); 
+      navigate('/dashboard'); // Redirigir al dashboard
 
     } catch (err: any) {
       setError(err.message);
@@ -49,7 +52,6 @@ export const Login: React.FC = () => {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-neon-main/5 rounded-full blur-[120px] -z-10" />
 
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-[450px]">
-        
         <div className="relative bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 shadow-2xl">
           
           <div className="text-center mb-8">
@@ -74,37 +76,23 @@ export const Login: React.FC = () => {
 
             <div className="relative group">
                 <Mail className="absolute left-5 top-4 text-gray-500 group-focus-within:text-white transition-colors" size={20} />
-                <input 
-                  name="email" type="email" required 
-                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm"
-                  placeholder="Correo electrónico"
-                />
+                <input name="email" type="email" required className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm" placeholder="Correo electrónico" />
             </div>
             
             <div className="relative group">
                 <Lock className="absolute left-5 top-4 text-gray-500 group-focus-within:text-white transition-colors" size={20} />
-                <input 
-                  name="password" type="password" required 
-                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm"
-                  placeholder="Contraseña"
-                />
+                <input name="password" type="password" required className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm" placeholder="Contraseña" />
             </div>
 
-            <button 
-              disabled={loading}
-              className="w-full bg-neon-main hover:bg-neon-dark text-black font-bold py-4 rounded-full transition-all flex items-center justify-center gap-2 mt-2 text-[15px]"
-            >
+            <button disabled={loading} className="w-full bg-neon-main hover:bg-neon-dark text-black font-bold py-4 rounded-full transition-all flex items-center justify-center gap-2 mt-2 text-[15px]">
               {loading ? <Loader2 className="animate-spin" /> : "Iniciar Sesión"}
             </button>
           </form>
 
           <div className="text-center mt-8 text-sm">
             <span className="text-gray-500">¿No tienes cuenta? </span>
-            <Link to="/register" className="text-neon-main font-medium hover:underline">
-              Regístrate
-            </Link>
+            <Link to="/register" className="text-neon-main font-medium hover:underline">Regístrate</Link>
           </div>
-
         </div>
       </motion.div>
     </div>
