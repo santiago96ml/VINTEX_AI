@@ -2,39 +2,37 @@ import React, { useState } from 'react';
 import { format, addDays, startOfDay, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { CitaModal } from '../modals/CitaModal';
+import { CitaModal } from '..//modals/CitaModal';
 
 export const AgendaView = ({ citas, doctores, clientes, satelliteFetch, reload }: any) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDoctor, setSelectedDoctor] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalData, setModalData] = useState<any>(null); // Datos para editar/crear
+  const [modalData, setModalData] = useState<any>(null);
 
-  // Filtrar doctores activos
   const activeDoctors = doctores.filter((d: any) => d.activo);
   const filteredDoctors = selectedDoctor === 'all' 
     ? activeDoctors 
     : activeDoctors.filter((d: any) => d.id === Number(selectedDoctor));
 
-  // Generar Horas (08:00 a 21:00)
   const hours = Array.from({ length: 13 }, (_, i) => i + 8); 
 
   const handleCellClick = (doctorId: number, hour: number, minute: number) => {
     const date = new Date(currentDate);
     date.setHours(hour, minute, 0, 0);
-    setModalData({ doctorId, date }); // Pre-llenar modal
+    setModalData({ doctorId, date });
     setIsModalOpen(true);
   };
 
   const handleEditClick = (e: React.MouseEvent, cita: any) => {
     e.stopPropagation();
-    setModalData({ cita }); // Modo edición
+    setModalData({ cita });
     setIsModalOpen(true);
   };
 
   return (
     <div className="flex flex-col h-full">
-      {/* HEADER AGENDA */}
+      {/* HEADER AGENDA SÓLIDO */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-tech-card p-4 rounded-xl border border-gray-800">
         <div className="flex items-center gap-4">
           <h2 className="text-xl font-bold text-white capitalize">
@@ -70,7 +68,7 @@ export const AgendaView = ({ citas, doctores, clientes, satelliteFetch, reload }
       {/* GRILLA DE AGENDA */}
       <div className="flex-1 overflow-auto bg-tech-card rounded-xl border border-gray-800 relative min-w-[800px]">
         <div className="flex sticky top-0 z-20 bg-tech-card border-b border-gray-800">
-          <div className="w-16 flex-shrink-0 bg-tech-bg border-r border-gray-800" /> {/* Columna Horas */}
+          <div className="w-16 flex-shrink-0 bg-tech-bg border-r border-gray-800" />
           {filteredDoctors.map((doc: any) => (
             <div key={doc.id} className="flex-1 min-w-[200px] py-3 px-2 text-center border-r border-gray-800 last:border-r-0">
               <div className="font-bold text-white">{doc.nombre}</div>
@@ -93,22 +91,19 @@ export const AgendaView = ({ citas, doctores, clientes, satelliteFetch, reload }
 
           {/* Columnas de Doctores */}
           {filteredDoctors.map((doc: any) => {
-             // Citas del día para este doctor
              const dayAppointments = citas.filter((c: any) => 
                c.doctor_id === doc.id && isSameDay(new Date(c.fecha_hora), currentDate)
              );
 
              return (
               <div key={doc.id} className="flex-1 min-w-[200px] relative border-r border-gray-800 last:border-r-0">
-                {/* Slots vacíos (Click to create) */}
+                {/* Slots vacíos */}
                 {hours.map(hour => (
                   <div key={hour} className="h-24 border-b border-gray-800 relative group">
-                    {/* Mitad superior :00 */}
                     <div 
                       onClick={() => handleCellClick(doc.id, hour, 0)}
                       className="h-1/2 border-b border-gray-800/30 hover:bg-neon-main/10 cursor-pointer transition-colors"
                     />
-                    {/* Mitad inferior :30 */}
                     <div 
                       onClick={() => handleCellClick(doc.id, hour, 30)}
                       className="h-1/2 hover:bg-neon-main/10 cursor-pointer transition-colors"
@@ -116,18 +111,14 @@ export const AgendaView = ({ citas, doctores, clientes, satelliteFetch, reload }
                   </div>
                 ))}
 
-                {/* Renderizado de Citas (Absoluto) */}
+                {/* Renderizado de Citas */}
                 {dayAppointments.map((cita: any) => {
                   const date = new Date(cita.fecha_hora);
                   const startHour = date.getHours();
                   const startMin = date.getMinutes();
                   
-                  // Calcular posición top (cada hora son 96px de alto en Tailwind h-24)
-                  // Ajustamos: h-24 = 6rem = 96px.
                   const top = ((startHour - 8) * 96) + ((startMin / 60) * 96);
                   const height = (cita.duracion_minutos / 60) * 96;
-
-                  // Color del doctor o default
                   const borderColor = doc.color || '#6B7280';
                   
                   return (
@@ -138,7 +129,7 @@ export const AgendaView = ({ citas, doctores, clientes, satelliteFetch, reload }
                       style={{ 
                         top: `${top}px`, 
                         height: `${height}px`,
-                        backgroundColor: `${borderColor}33`, // 20% opacity
+                        backgroundColor: `${borderColor}33`, 
                         borderColor: borderColor
                       }}
                     >

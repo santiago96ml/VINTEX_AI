@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-// CORRECCIÓN: Usamos 'Stethoscope' en lugar de 'UserMd'
 import { Calendar, Users, Stethoscope, BarChart2, LogOut, Menu } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
-import { AgendaView } from './views/AgendaView';
-import { PatientsView } from './views/PatientsView';
-import { DoctorsView } from './views/DoctorsView';
-import { MetricsView } from './views/MetricsView';
+import { AgendaView } from '../../pages/dashboard/views/AgendaView';
+import { PatientsView } from '../../pages/dashboard/views/PatientsView';
+import { DoctorsView } from '../../pages/dashboard/views/DoctorsView';
+import { MetricsView } from '../../pages/dashboard/views/MetricsView';
 import { useRealtime } from '../../hooks/useRealtime';
 
 const MASTER_API = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
@@ -73,17 +72,12 @@ export const UserDashboard = () => {
   useRealtime(config, loadData);
 
   // --- RENDERIZADO ---
-  if (loading) return (
-    <div className="min-h-screen bg-tech-bg flex items-center justify-center text-neon-main gap-4">
-      <div className="w-12 h-12 border-4 border-tech-card border-t-neon-main rounded-full animate-spin"></div>
-      <p className="font-mono animate-pulse">Cargando Vintex OS...</p>
-    </div>
-  );
+  // (Pantalla de carga eliminada para acceso directo)
 
   return (
     <div className="flex h-screen bg-tech-bg overflow-hidden font-sans text-gray-200">
       
-      {/* SIDEBAR */}
+      {/* SIDEBAR SÓLIDO */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-tech-card border-r border-gray-800 transform transition-transform duration-300 md:relative md:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-gray-800 text-center">
           <h1 className="text-2xl font-bold text-white flex items-center justify-center gap-2">
@@ -94,7 +88,6 @@ export const UserDashboard = () => {
         <nav className="p-4 space-y-2">
           <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'agenda'} onClick={() => { setActiveTab('agenda'); setSidebarOpen(false); }} />
           <SidebarItem icon={Users} label="Pacientes" active={activeTab === 'pacientes'} onClick={() => { setActiveTab('pacientes'); setSidebarOpen(false); }} />
-          {/* CORRECCIÓN: Usamos Stethoscope aquí */}
           <SidebarItem icon={Stethoscope} label="Doctores" active={activeTab === 'doctores'} onClick={() => { setActiveTab('doctores'); setSidebarOpen(false); }} />
           <SidebarItem icon={BarChart2} label="Métricas" active={activeTab === 'metricas'} onClick={() => { setActiveTab('metricas'); setSidebarOpen(false); }} />
         </nav>
@@ -111,6 +104,7 @@ export const UserDashboard = () => {
 
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Header Móvil */}
         <div className="md:hidden flex items-center justify-between p-4 bg-tech-card border-b border-gray-800">
           <button onClick={() => setSidebarOpen(true)} className="text-white"><Menu /></button>
           <span className="font-bold text-white">Vintex Clinic</span>
@@ -118,43 +112,46 @@ export const UserDashboard = () => {
         </div>
 
         <div className="flex-1 overflow-auto bg-tech-bg p-4 md:p-6 relative">
-          {activeTab === 'agenda' && (
-            <AgendaView 
-              citas={citas} 
-              doctores={doctores} 
-              clientes={pacientes}
-              satelliteFetch={satelliteFetch} 
-              reload={loadData} 
-            />
-          )}
-          {activeTab === 'pacientes' && (
-            <PatientsView 
-              pacientes={pacientes} 
-              citas={citas}
-              satelliteFetch={satelliteFetch} 
-              reload={loadData}
-            />
-          )}
-          {activeTab === 'doctores' && (
-            <DoctorsView 
-              doctores={doctores} 
-              satelliteFetch={satelliteFetch} 
-              reload={loadData} 
-            />
-          )}
-          {activeTab === 'metricas' && (
-            <MetricsView citas={citas} pacientes={pacientes} doctores={doctores} />
-          )}
+          <div className="max-w-7xl mx-auto space-y-6">
+            {activeTab === 'agenda' && (
+                <AgendaView 
+                citas={citas} 
+                doctores={doctores} 
+                clientes={pacientes}
+                satelliteFetch={satelliteFetch} 
+                reload={loadData} 
+                />
+            )}
+            {activeTab === 'pacientes' && (
+                <PatientsView 
+                pacientes={pacientes} 
+                citas={citas}
+                satelliteFetch={satelliteFetch} 
+                reload={loadData}
+                />
+            )}
+            {activeTab === 'doctores' && (
+                <DoctorsView 
+                doctores={doctores} 
+                satelliteFetch={satelliteFetch} 
+                reload={loadData} 
+                />
+            )}
+            {activeTab === 'metricas' && (
+                <MetricsView citas={citas} pacientes={pacientes} doctores={doctores} />
+            )}
+          </div>
         </div>
       </main>
     </div>
   );
 };
 
+// Item de Sidebar Clásico
 const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
   <button 
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 border-l-4 ${active ? 'bg-[#1a1c20] text-white border-neon-main shadow-[0_0_10px_rgba(0,255,159,0.1)]' : 'border-transparent text-gray-400 hover:text-white hover:bg-gray-800'}`}
+    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 border-l-4 ${active ? 'bg-[#1a1c20] text-white border-neon-main' : 'border-transparent text-gray-400 hover:text-white hover:bg-gray-800'}`}
   >
     <Icon size={20} className={active ? 'text-neon-main' : ''} />
     <span className="font-medium">{label}</span>
