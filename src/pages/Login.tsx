@@ -9,8 +9,8 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Usar variable de entorno con fallback
-  const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+  // Usar variable de entorno con fallback (detecta si es dev o prod)
+  const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host');
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

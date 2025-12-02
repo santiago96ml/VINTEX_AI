@@ -16,7 +16,7 @@ export const useStorage = (satelliteFetch: any) => {
         })
       });
 
-      // 2. Subir directamente a Supabase (Bypass backend para velocidad)
+      // 2. Subir directamente a Supabase
       const uploadRes = await fetch(signedUrl, {
         method: 'PUT',
         headers: { 'Content-Type': file.type },

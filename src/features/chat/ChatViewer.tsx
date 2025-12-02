@@ -1,15 +1,7 @@
 import React from 'react';
 import { User, Bot } from 'lucide-react';
 
-interface ChatMessage {
-  id: number;
-  message: {
-    type: 'human' | 'ai';
-    content: string;
-  };
-}
-
-export const ChatViewer: React.FC<{ messages: ChatMessage[] }> = ({ messages }) => {
+export const ChatViewer: React.FC<{ messages: any[] }> = ({ messages }) => {
   return (
     <div className="flex flex-col gap-4 h-96 overflow-y-auto p-4 bg-tech-black/50 rounded-lg border border-white/5">
       {messages.length === 0 && <p className="text-gray-500 text-center">No hay historial.</p>}
@@ -19,24 +11,18 @@ export const ChatViewer: React.FC<{ messages: ChatMessage[] }> = ({ messages }) 
         let content = msg.message.content;
         let timestamp = '';
 
-        // Lógica de Parseo (Porteada del CRM JS)
         if (isUser) {
-           // Extraer fecha si existe
            if (content.includes('Fecha y hora actual:')) {
              const parts = content.split('Fecha y hora actual:');
              content = parts[0]; 
              timestamp = parts[1]?.split('\n')[0] || '';
            }
-           // Limpiar prefijo
            content = content.replace("Mensaje del paciente en texto:", "").trim();
         } else {
-           // Parsear JSON del bot
            try {
              const json = JSON.parse(content);
-             content = json.output?.mensaje_1 || 
-                       json.output?.mensaje_2 || 
-                       json.output?.mensaje_3 || content;
-           } catch (e) { /* Es texto plano, dejar como está */ }
+             content = json.output?.mensaje_1 || json.output?.mensaje_2 || json.output?.mensaje_3 || content;
+           } catch (e) { }
         }
 
         return (
