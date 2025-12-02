@@ -47,20 +47,16 @@ export const UserDashboard = () => {
       setErrorState(null);
 
       // PASO 1: Manejo de OAuth (Google)
-      // Detectamos si hay un hash en la URL (indicador de que volvemos de Google)
       const isOAuthRedirect = window.location.hash && window.location.hash.includes('access_token');
       
       let currentSession = null;
 
       if (isOAuthRedirect) {
         console.log("🔄 Procesando retorno de Google...");
-        // Esperamos a que Supabase procese el hash
         const { data } = await supabase.auth.getSession();
         currentSession = data.session;
-        // Limpiamos el hash de la URL para que quede limpia
         window.history.replaceState(null, '', window.location.pathname);
       } else {
-        // Si no es redirect, intentamos recuperar la sesión normal
         const stored = localStorage.getItem('vintex_session');
         if (stored) {
             try {
@@ -69,14 +65,12 @@ export const UserDashboard = () => {
         }
       }
 
-      // Si después de todo no hay sesión, al login
       if (!currentSession || !currentSession.access_token) {
          console.log("❌ No se encontró sesión válida. Redirigiendo.");
          if (mounted) window.location.href = '/login';
          return;
       }
 
-      // Guardamos/Actualizamos la sesión segura
       localStorage.setItem('vintex_session', JSON.stringify(currentSession));
       localStorage.setItem('vintex_user', JSON.stringify(currentSession.user));
       
@@ -118,9 +112,14 @@ export const UserDashboard = () => {
     return () => { mounted = false; };
   }, []);
 
-  // Fetch Wrapper
+  // Fetch Wrapper (CORREGIDO)
   const satelliteFetch = useCallback(async (endpoint: string, opts: any = {}) => {
-      if (!config || !token) return;
+      // CORRECCIÓN: Verificamos que backendUrl exista antes de usarlo
+      if (!config || !token || !config.backendUrl) {
+          // Opcional: console.warn("Esperando configuración...", endpoint);
+          return;
+      }
+      
       const baseUrl = config.backendUrl.replace(/\/$/, ""); 
       try {
         const res = await fetch(`${baseUrl}/api${endpoint}`, {
@@ -146,6 +145,7 @@ export const UserDashboard = () => {
               satelliteFetch('/initial-data'),
               satelliteFetch('/citas')
           ]);
+          // Validamos antes de setear para evitar errores si la respuesta es undefined
           if (initData) setPacientes(initData.clientes || []);
           if (citasData) setCitas(citasData || []);
       } catch (error) { console.error(error); } 

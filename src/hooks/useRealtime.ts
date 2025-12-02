@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 export const useRealtime = (config: any, onUpdate: () => void) => {
   useEffect(() => {
-    if (!config) return;
+    // CORRECCIÓN: Validamos que existan las credenciales antes de conectar
+    if (!config || !config.supabaseUrl || !config.supabaseAnonKey) return;
 
     const client = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
