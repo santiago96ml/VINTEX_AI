@@ -9,13 +9,17 @@ export default {
       colors: {
         tech: {
           black: '#0A0A0A',      // Void Black
+          bg: '#0D0D0F',         // Fondo principal (del segundo config)
           card: '#121212',       // Titanium (Superficies)
+          cardHover: '#16171a',  // Tarjetas hover (del segundo config)
           input: '#1a1c20',
           zinc: '#27272a',
+          border: '#333333',
         },
         neon: {
           main: '#00FF99',       // Cyber Neon (Principal)
-          dark: '#00cc7a',       // Hover state
+          dark: '#00cc7a',       // Estado activo/oscuro
+          hover: '#00e68f',      // Hover state
           glow: 'rgba(0, 255, 153, 0.5)', // Para sombras
           teal: '#00D1B2',       // Gradiente secundario
         },
@@ -26,9 +30,8 @@ export default {
         }
       },
       fontFamily: {
-        // CORREGIDO: Agregué 'Orbitron' aquí.
-        display: ['Orbitron', 'sans-serif'], 
-        sans: ['Inter', 'sans-serif'],
+        display: ['Orbitron', 'sans-serif'], // Fuente tecnológica
+        sans: ['Inter', 'sans-serif'],       // Fuente legible
       },
       backgroundImage: {
         'cyber-gradient': 'linear-gradient(135deg, #00FF99 0%, #00D1B2 100%)',
@@ -40,6 +43,7 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'spin-slow': 'spin 3s linear infinite', // Agregada del segundo config
       }
     },
   },

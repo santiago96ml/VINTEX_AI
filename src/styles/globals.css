@@ -1,28 +1,72 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@600;700;800&display=swap');
+/* 1. IMPORTS: Unificamos Inter y Orbitron (para coincidir con tu config) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* 2. BASE: Estilos fundamentales */
 @layer base {
   body {
-    /* Usamos tus colores exactos */
-    @apply bg-tech-black text-gray-main font-sans antialiased overflow-x-hidden;
+    /* Usamos 'bg-tech-bg' (el tono #0D0D0F) y 'text-gray-main' para consistencia */
+    @apply bg-tech-bg text-gray-main font-sans antialiased overflow-x-hidden;
   }
 
+  /* Todos los títulos usarán la fuente tecnológica Orbitron */
   h1, h2, h3, h4, h5, h6 {
     @apply font-display text-white;
   }
 }
 
+/* 3. COMPONENTS: Elementos reutilizables (Botones, Inputs) */
+@layer components {
+  .dark-input {
+    @apply bg-tech-input border border-gray-700 text-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-neon-main focus:ring-1 focus:ring-neon-main transition-all w-full;
+  }
+
+  .btn-primary {
+    @apply bg-neon-main text-tech-black font-semibold px-4 py-2 rounded-lg hover:bg-neon-hover transition-colors flex items-center justify-center gap-2 shadow-neon hover:shadow-neon-strong;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors;
+  }
+}
+
+/* 4. UTILITIES: Efectos visuales específicos */
 @layer utilities {
   .text-neon-gradient {
-    /* CORREGIDO: Coincide con 'cyber-gradient' de tu config */
     @apply bg-cyber-gradient bg-clip-text text-transparent;
   }
   
-  /* Clase utilitaria para bordes brillantes sutiles */
+  /* Borde brillante sutil */
   .border-glow {
     @apply border border-white/10 hover:border-neon-main/50 transition-colors duration-300;
   }
+}
+
+/* 5. ESTILOS GLOBALES / LEGACY (No dependen de capas Tailwind) */
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1c20;
+}
+::-webkit-scrollbar-thumb {
+  background: #3d4047;
+  border-radius: 10px;
+}
+
+/* Efecto para columnas de doctores inactivos en agenda */
+.inactive-column {
+  background-image: repeating-linear-gradient(
+    45deg, 
+    rgba(42, 45, 52, 0.5), 
+    rgba(42, 45, 52, 0.5) 10px, 
+    rgba(50, 53, 60, 0.5) 10px, 
+    rgba(50, 53, 60, 0.5) 20px
+  );
 }
