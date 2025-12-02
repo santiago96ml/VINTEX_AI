@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+// CORRECCIÓN: Usamos 'Stethoscope' en lugar de 'UserMd'
 import { Calendar, Users, Stethoscope, BarChart2, LogOut, Menu } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { AgendaView } from './views/AgendaView';
@@ -16,7 +17,7 @@ export const UserDashboard = () => {
   const [session, setSession] = useState<any>(null);
   const [config, setConfig] = useState<any>(null);
   
-  // Datos Globales (Estado compartido)
+  // Datos Globales
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [doctores, setDoctores] = useState<any[]>([]);
   const [citas, setCitas] = useState<any[]>([]);
@@ -60,7 +61,6 @@ export const UserDashboard = () => {
       if (!data.session) { window.location.href = '/login'; return; }
       setSession(data.session);
       
-      // Configuración para Realtime
       const res = await fetch(`${MASTER_API}/api/config/init-session`, {
          headers: { 'Authorization': `Bearer ${data.session.access_token}` }
       });
@@ -70,10 +70,15 @@ export const UserDashboard = () => {
   }, []);
 
   useEffect(() => { if (session) loadData(); }, [session, loadData]);
-  useRealtime(config, loadData); // Sockets activados
+  useRealtime(config, loadData);
 
   // --- RENDERIZADO ---
-  if (loading) return <div className="min-h-screen bg-tech-bg flex items-center justify-center text-neon-main">Cargando Vintex OS...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-tech-bg flex items-center justify-center text-neon-main gap-4">
+      <div className="w-12 h-12 border-4 border-tech-card border-t-neon-main rounded-full animate-spin"></div>
+      <p className="font-mono animate-pulse">Cargando Vintex OS...</p>
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-tech-bg overflow-hidden font-sans text-gray-200">
@@ -89,6 +94,7 @@ export const UserDashboard = () => {
         <nav className="p-4 space-y-2">
           <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'agenda'} onClick={() => { setActiveTab('agenda'); setSidebarOpen(false); }} />
           <SidebarItem icon={Users} label="Pacientes" active={activeTab === 'pacientes'} onClick={() => { setActiveTab('pacientes'); setSidebarOpen(false); }} />
+          {/* CORRECCIÓN: Usamos Stethoscope aquí */}
           <SidebarItem icon={Stethoscope} label="Doctores" active={activeTab === 'doctores'} onClick={() => { setActiveTab('doctores'); setSidebarOpen(false); }} />
           <SidebarItem icon={BarChart2} label="Métricas" active={activeTab === 'metricas'} onClick={() => { setActiveTab('metricas'); setSidebarOpen(false); }} />
         </nav>
@@ -105,7 +111,6 @@ export const UserDashboard = () => {
 
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Header Móvil */}
         <div className="md:hidden flex items-center justify-between p-4 bg-tech-card border-b border-gray-800">
           <button onClick={() => setSidebarOpen(true)} className="text-white"><Menu /></button>
           <span className="font-bold text-white">Vintex Clinic</span>
@@ -146,7 +151,6 @@ export const UserDashboard = () => {
   );
 };
 
-// Componente auxiliar para ítems del sidebar
 const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
   <button 
     onClick={onClick}
