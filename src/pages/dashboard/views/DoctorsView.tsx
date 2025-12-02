@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserMd, Plus, Edit2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit2, CheckCircle, XCircle } from 'lucide-react';
 
 export const DoctorsView = ({ doctores, satelliteFetch, reload }: any) => {
   const [editingDoc, setEditingDoc] = useState<any>(null); // null = modo lista, {} = modo crear, {id...} = modo editar
@@ -9,7 +9,13 @@ export const DoctorsView = ({ doctores, satelliteFetch, reload }: any) => {
     const url = editingDoc.id ? `/doctores/${editingDoc.id}` : '/doctores';
     const method = editingDoc.id ? 'PATCH' : 'POST';
     
-    await satelliteFetch(url, { method, body: JSON.stringify(editingDoc) });
+    // Asegurar color gris por defecto si no se elige uno, para cumplir con el backend
+    const payload = {
+        ...editingDoc,
+        color: editingDoc.color || '#6B7280'
+    };
+    
+    await satelliteFetch(url, { method, body: JSON.stringify(payload) });
     setEditingDoc(null);
     reload();
   };
@@ -73,6 +79,19 @@ export const DoctorsView = ({ doctores, satelliteFetch, reload }: any) => {
                    </label>
                 </div>
               </div>
+              
+              {/* Horarios (Requeridos por Backend) */}
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-xs text-gray-400">Inicio Jornada</label>
+                    <input type="time" className="dark-input" value={editingDoc.horario_inicio || '08:00'} onChange={e => setEditingDoc({...editingDoc, horario_inicio: e.target.value})} />
+                 </div>
+                 <div>
+                    <label className="text-xs text-gray-400">Fin Jornada</label>
+                    <input type="time" className="dark-input" value={editingDoc.horario_fin || '18:00'} onChange={e => setEditingDoc({...editingDoc, horario_fin: e.target.value})} />
+                 </div>
+              </div>
+
               <div className="flex justify-end gap-2 mt-6">
                 <button type="button" onClick={() => setEditingDoc(null)} className="btn-secondary">Cancelar</button>
                 <button type="submit" className="btn-primary">Guardar</button>

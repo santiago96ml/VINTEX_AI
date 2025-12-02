@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, MessageSquare, Loader2 } from 'lucide-react';
-import { ChatViewer } from '../../../features/chat/ChatViewer'; // Asegúrate de que esta ruta sea correcta
+// CORRECCIÓN AQUÍ: La ruta correcta para llegar a features desde pages/dashboard/modals
+import { ChatViewer } from '../../../features/chat/ChatViewer'; 
 
 export const ChatModal = ({ patient, onClose, satelliteFetch }: any) => {
   const [messages, setMessages] = useState<any[]>([]);
@@ -8,6 +9,7 @@ export const ChatModal = ({ patient, onClose, satelliteFetch }: any) => {
 
   useEffect(() => {
     const loadChat = async () => {
+      // Validación extra: si no hay teléfono, no intentamos cargar
       if (!patient?.telefono) {
         setLoading(false);
         return;
@@ -34,9 +36,9 @@ export const ChatModal = ({ patient, onClose, satelliteFetch }: any) => {
             <h3 className="text-white font-bold flex items-center gap-2">
               <MessageSquare className="text-neon-main" size={20} /> Historial de Chat
             </h3>
-            <p className="text-sm text-gray-400">Paciente: {patient.nombre}</p>
+            <p className="text-sm text-gray-400">Paciente: {patient?.nombre || 'Desconocido'}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={24}/></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors"><X size={24}/></button>
         </div>
 
         {/* CONTENT */}

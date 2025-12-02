@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Users, UserMd, BarChart2, LogOut, Menu, X } from 'lucide-react';
+import { Calendar, Users, Stethoscope, BarChart2, LogOut, Menu } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
-import { AgendaView } from '../dashboard/views/AgendaView';
-import { PatientsView } from '../dashboard/views/PatientsView';
-import { DoctorsView } from '../dashboard/views/DoctorsView';
-import { MetricsView } from '../dashboard/views/MetricsView';
+import { AgendaView } from './views/AgendaView';
+import { PatientsView } from './views/PatientsView';
+import { DoctorsView } from './views/DoctorsView';
+import { MetricsView } from './views/MetricsView';
 import { useRealtime } from '../../hooks/useRealtime';
 
 const MASTER_API = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
@@ -89,7 +89,7 @@ export const UserDashboard = () => {
         <nav className="p-4 space-y-2">
           <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'agenda'} onClick={() => { setActiveTab('agenda'); setSidebarOpen(false); }} />
           <SidebarItem icon={Users} label="Pacientes" active={activeTab === 'pacientes'} onClick={() => { setActiveTab('pacientes'); setSidebarOpen(false); }} />
-          <SidebarItem icon={UserMd} label="Doctores" active={activeTab === 'doctores'} onClick={() => { setActiveTab('doctores'); setSidebarOpen(false); }} />
+          <SidebarItem icon={Stethoscope} label="Doctores" active={activeTab === 'doctores'} onClick={() => { setActiveTab('doctores'); setSidebarOpen(false); }} />
           <SidebarItem icon={BarChart2} label="Métricas" active={activeTab === 'metricas'} onClick={() => { setActiveTab('metricas'); setSidebarOpen(false); }} />
         </nav>
 
