@@ -2,22 +2,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '../../components/layout/Navbar';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Loader2, Search, LogOut, RefreshCw, AlertTriangle } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/supabaseClient'; // Cliente Auth del Master
 
-// Importar Componentes
+// Componentes
 import { PatientCard } from '../../features/patients/PatientCard';
 import { ChatViewer } from '../../features/chat/ChatViewer';
 import { useStorage } from '../../hooks/useStorage';
 import { useRealtime } from '../../hooks/useRealtime';
 
-const MASTER_API = import.meta.env.DEV 
-  ? '' 
-  : (import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host');
+// URLs proporcionadas
+const MASTER_API = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+const SATELLITE_API = 'https://webs-de-vintex-bakend-de-clinica.1kh9sk.easypanel.host';
 
 export const UserDashboard = () => {
   // Estado Global
-  const [config, setConfig] = useState<any>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [session, setSession] = useState<any>(null);
+  const [config, setConfig] = useState<any>(null); // Datos de conexión DB Clínica (para Realtime)
   const [loading, setLoading] = useState(true);
   const [errorState, setErrorState] = useState<{title: string, msg: string} | null>(null);
   
@@ -25,7 +25,7 @@ export const UserDashboard = () => {
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [citas, setCitas] = useState<any[]>([]);
   
-  // Estado UI
+  // UI State
   const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes'>('agenda');
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [modalType, setModalType] = useState<'chat' | 'files' | null>(null);
@@ -39,123 +39,112 @@ export const UserDashboard = () => {
     window.location.href = '/login';
   };
 
-  // 1. Lógica de Inicialización Blindada
+  // --- 1. FETCH AL SATÉLITE (Con Token del Master) ---
+  const satelliteFetch = useCallback(async (endpoint: string, opts: any = {}) => {
+      // Necesitamos el token para que el satélite sepa quiénes somos
+      if (!session?.access_token) return;
+      
+      try {
+        const res = await fetch(`${SATELLITE_API}/api${endpoint}`, {
+            ...opts,
+            headers: { 
+                ...opts.headers, 
+                // ENVIAMOS EL TOKEN DEL MASTER
+                'Authorization': `Bearer ${session.access_token}`, 
+                'Content-Type': 'application/json' 
+            }
+        });
+        
+        if (res.status === 401 || res.status === 403) {
+             console.warn("Sesión expirada. Saliendo...");
+             handleLogout();
+             return;
+        }
+        
+        if (!res.ok) throw new Error(`Error Satélite: ${res.statusText}`);
+        return res.json();
+      } catch (e) {
+        console.error(`Error Satélite (${endpoint}):`, e);
+        return null;
+      }
+  }, [session]);
+
+  const { uploadFile, uploading } = useStorage(satelliteFetch);
+
+  // --- 2. INICIALIZACIÓN ---
   useEffect(() => {
     let mounted = true;
 
     const init = async () => {
       setErrorState(null);
 
-      // PASO 1: Manejo de OAuth (Google)
-      const isOAuthRedirect = window.location.hash && window.location.hash.includes('access_token');
+      // A. Obtener Sesión Actual (Supabase Master)
+      const { data } = await supabase.auth.getSession();
       
-      let currentSession = null;
-
-      if (isOAuthRedirect) {
-        console.log("🔄 Procesando retorno de Google...");
-        const { data } = await supabase.auth.getSession();
-        currentSession = data.session;
-        window.history.replaceState(null, '', window.location.pathname);
-      } else {
-        const stored = localStorage.getItem('vintex_session');
-        if (stored) {
-            try {
-                currentSession = JSON.parse(stored);
-            } catch (e) { console.error("Sesión corrupta"); }
-        }
-      }
-
-      if (!currentSession || !currentSession.access_token) {
-         console.log("❌ No se encontró sesión válida. Redirigiendo.");
+      if (!data.session) {
          if (mounted) window.location.href = '/login';
          return;
       }
 
-      localStorage.setItem('vintex_session', JSON.stringify(currentSession));
-      localStorage.setItem('vintex_user', JSON.stringify(currentSession.user));
-      
-      const tk = currentSession.access_token;
-      if (mounted) setToken(tk);
+      if(mounted) setSession(data.session);
 
-      // PASO 2: Conexión al Master
+      // B. Obtener Configuración de Clínica (Solo para usar useRealtime)
+      // El fetch de datos normales va al satélite, pero para sockets necesitamos las credenciales
       try {
-        console.log("🔗 Conectando a Master con token...");
         const res = await fetch(`${MASTER_API}/api/config/init-session`, {
-            headers: { 'Authorization': `Bearer ${tk}` }
+            headers: { 'Authorization': `Bearer ${data.session.access_token}` }
         });
         
-        if (res.status === 401 || res.status === 403) {
-            console.warn("⚠️ Token rechazado por Master");
-            handleLogout();
-            return;
-        }
-        
-        if (!res.ok) throw new Error(`Error ${res.status} del Servidor Master`);
-        
+        if (!res.ok) throw new Error("Error conectando con Central");
         const cfg = await res.json();
-        if (mounted) setConfig(cfg);
         
-      } catch (e: any) { 
-        console.error("❌ Error crítico:", e);
-        if (mounted) {
-            setErrorState({
-                title: "Error de Conexión",
-                msg: "No se pudo conectar con tu clínica. " + (e.message || "")
-            });
-            setLoading(false);
+        if (!cfg.hasClinic) {
+            throw new Error("No tienes una clínica asignada. Contacta a soporte.");
         }
+
+        if (mounted) setConfig(cfg);
+
+      } catch (e: any) {
+        console.error(e);
+        if (mounted) setErrorState({ title: "Error de Cuenta", msg: e.message });
       }
     };
 
     init();
-
     return () => { mounted = false; };
   }, []);
 
-  // Fetch Wrapper (CORREGIDO)
-  const satelliteFetch = useCallback(async (endpoint: string, opts: any = {}) => {
-      // CORRECCIÓN: Verificamos que backendUrl exista antes de usarlo
-      if (!config || !token || !config.backendUrl) {
-          // Opcional: console.warn("Esperando configuración...", endpoint);
-          return;
-      }
-      
-      const baseUrl = config.backendUrl.replace(/\/$/, ""); 
-      try {
-        const res = await fetch(`${baseUrl}/api${endpoint}`, {
-            ...opts,
-            headers: { ...opts.headers, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-        });
-        if (res.status === 401) { handleLogout(); return; }
-        return res.json();
-      } catch (e) {
-        console.error(`Error Satélite (${endpoint}):`, e);
-        return [];
-      }
-  }, [config, token]);
-
-  const { uploadFile, uploading } = useStorage(satelliteFetch);
-
-  // Carga de Datos
+  // --- 3. CARGAR DATOS ---
   const loadData = useCallback(async () => {
-      if (!config) return;
-      setLoading(true);
+      if (!session) return;
+      
+      if (pacientes.length === 0) setLoading(true);
+
       try {
           const [initData, citasData] = await Promise.all([
               satelliteFetch('/initial-data'),
               satelliteFetch('/citas')
           ]);
-          // Validamos antes de setear para evitar errores si la respuesta es undefined
+
           if (initData) setPacientes(initData.clientes || []);
           if (citasData) setCitas(citasData || []);
-      } catch (error) { console.error(error); } 
-      finally { setLoading(false); }
-  }, [satelliteFetch, config]);
+          
+      } catch (error) { 
+          console.error(error); 
+      } finally { 
+          setLoading(false); 
+      }
+  }, [satelliteFetch, session, pacientes.length]);
 
-  useEffect(() => { if(config) loadData(); }, [config, loadData]);
+  // Cargar al tener sesión
+  useEffect(() => { 
+      if(session) loadData(); 
+  }, [session, loadData]);
+
+  // Activar Sockets (Realtime) directo a la DB de la clínica
   useRealtime(config, loadData);
 
-  // Handlers
+  // --- HANDLERS UI ---
   const handleToggleBot = async (patient: any) => {
     const newStatus = !patient.activo;
     setPacientes(prev => prev.map(p => p.id === patient.id ? {...p, activo: newStatus} : p));
@@ -167,7 +156,7 @@ export const UserDashboard = () => {
     setModalType('chat');
     setChatMessages([]); 
     const history = await satelliteFetch(`/chat-history/${patient.telefono}`);
-    setChatMessages(history || []);
+    if (history) setChatMessages(history);
   };
 
   const handleOpenFiles = async (patient: any) => {
@@ -175,7 +164,7 @@ export const UserDashboard = () => {
     setModalType('files');
     setPatientFiles([]); 
     const files = await satelliteFetch(`/files/${patient.id}`);
-    setPatientFiles(files || []);
+    if (files) setPatientFiles(files);
   };
 
   const handleFileUpload = async (e: any) => {
@@ -184,11 +173,11 @@ export const UserDashboard = () => {
     const success = await uploadFile(file, selectedPatient.id);
     if(success) {
         const files = await satelliteFetch(`/files/${selectedPatient.id}`);
-        setPatientFiles(files || []);
+        if (files) setPatientFiles(files);
     }
   };
 
-  // Render Error
+  // VISTAS DE ERROR Y CARGA
   if (errorState) {
       return (
         <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center text-white gap-6 p-4">
@@ -196,33 +185,33 @@ export const UserDashboard = () => {
                 <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
                 <h2 className="text-2xl font-bold mb-2">{errorState.title}</h2>
                 <p className="text-gray-400 mb-6">{errorState.msg}</p>
-                <div className="flex gap-4 justify-center">
-                    <button onClick={() => window.location.reload()} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-6 py-3 rounded-lg transition-colors"><RefreshCw size={18} /> Reintentar</button>
-                    <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg transition-colors font-bold"><LogOut size={18} /> Salir</button>
-                </div>
+                <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg transition-colors font-bold mx-auto"><LogOut size={18} /> Salir</button>
             </div>
         </div>
       );
   }
 
-  // Render Loading
-  if (loading || !config) {
+  if (loading) {
       return (
         <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center text-neon-main gap-4">
             <Loader2 className="animate-spin w-12 h-12" />
-            <p className="text-gray-500 text-sm font-mono animate-pulse">
-                {token ? "Conectando con tu clínica..." : "Validando credenciales..."}
-            </p>
+            <p className="text-gray-500 text-sm font-mono animate-pulse">Sincronizando satélite...</p>
         </div>
       );
   }
 
-  // Render Dashboard
+  // DASHBOARD PRINCIPAL
   return (
     <div className="min-h-screen bg-[#0D0D0F] text-white pt-24 pb-10 px-6 font-sans">
       <Navbar />
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 h-[85vh]">
+        
+        {/* SIDEBAR */}
         <GlassCard className="col-span-1 flex flex-col gap-2 h-full">
+           <div className="mb-4 px-4">
+               <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest mb-1">Clínica</h3>
+               <p className="text-white font-display truncate">{session?.user?.user_metadata?.full_name || 'Usuario'}</p>
+           </div>
            <button onClick={() => setActiveTab('agenda')} className={`p-4 rounded-xl text-left font-bold transition-all ${activeTab === 'agenda' ? 'bg-neon-main text-black' : 'text-gray-400 hover:bg-white/5'}`}>Agenda</button>
            <button onClick={() => setActiveTab('pacientes')} className={`p-4 rounded-xl text-left font-bold transition-all ${activeTab === 'pacientes' ? 'bg-neon-main text-black' : 'text-gray-400 hover:bg-white/5'}`}>Pacientes</button>
            <div className="mt-auto border-t border-white/10 pt-4">
@@ -230,12 +219,29 @@ export const UserDashboard = () => {
            </div>
         </GlassCard>
 
+        {/* CONTENIDO PRINCIPAL */}
         <GlassCard className="col-span-3 h-full overflow-hidden flex flex-col relative !p-0">
             {activeTab === 'agenda' && (
-                <div className="p-6">
-                    <h2 className="text-2xl font-bold mb-4">Agenda Inteligente</h2>
-                    <div className="grid grid-cols-5 gap-2 h-full overflow-y-auto">
-                        <p className="text-gray-500 col-span-5 text-center py-20">Agenda visual en construcción...</p>
+                <div className="p-6 h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold">Agenda Inteligente</h2>
+                        <button className="bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-lg text-sm transition-colors" onClick={loadData}><RefreshCw size={14}/></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {citas.length === 0 ? <p className="text-gray-500 text-center py-20">No hay citas agendadas.</p> : 
+                         citas.map((cita: any) => (
+                            <div key={cita.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-neon-main/30 transition-colors">
+                                <div>
+                                    <p className="text-neon-main font-mono text-xs">{new Date(cita.fecha_hora).toLocaleString()}</p>
+                                    <p className="font-bold text-white">{cita.cliente?.nombre || 'Desconocido'}</p>
+                                    <p className="text-xs text-gray-400">{cita.doctor?.nombre}</p>
+                                </div>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${cita.estado === 'confirmada' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                    {cita.estado}
+                                </span>
+                            </div>
+                         ))
+                        }
                     </div>
                 </div>
             )}
@@ -254,6 +260,7 @@ export const UserDashboard = () => {
         </GlassCard>
       </div>
 
+      {/* MODAL GLOBAL (Chat/Archivos) */}
       {modalType && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setModalType(null)}>
             <div className="bg-[#1a1c20] w-full max-w-2xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
