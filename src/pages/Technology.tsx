@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Server, Zap, Lock, Cpu, Globe } from 'lucide-react';
+import { Zap, Lock, Cpu, Globe } from 'lucide-react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StartTrial } from '../features/landing/StartTrial';
 

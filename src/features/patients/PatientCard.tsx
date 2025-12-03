@@ -1,4 +1,3 @@
-import React from 'react';
 import { MessageSquare, FileText, Bot, AlertCircle } from 'lucide-react';
 
 export const PatientCard = ({ patient, actions }: any) => {

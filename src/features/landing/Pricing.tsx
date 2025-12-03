@@ -71,7 +71,7 @@ export const Pricing: React.FC = () => {
 
         {/* Grid de Tarjetas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto items-start">
-          {plans.map((plan, index) => (
+          {plans.map((plan) => (
             <GlassCard 
               key={plan.name}
               // Si es popular, le damos borde neón y sombra

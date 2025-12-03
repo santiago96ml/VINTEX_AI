@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CalendarCheck, MessageSquareDot, Clock, RefreshCw, ChevronDown } from 'lucide-react';
+import { CalendarCheck, Clock, RefreshCw } from 'lucide-react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StartTrial } from '../features/landing/StartTrial';
 

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { format, addDays, startOfDay, isSameDay } from 'date-fns';
+import { format, addDays, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { CitaModal } from '..//modals/CitaModal';
+import { CitaModal } from '../modals/CitaModal';
 
 export const AgendaView = ({ citas, doctores, clientes, satelliteFetch, reload }: any) => {
   const [currentDate, setCurrentDate] = useState(new Date());

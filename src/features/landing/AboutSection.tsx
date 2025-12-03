@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Target, Lightbulb, Users, Cpu, ShieldCheck, Rocket } from 'lucide-react';
+import { Target, Lightbulb, Cpu, ShieldCheck, Rocket } from 'lucide-react';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { cn } from '../../lib/utils';
 

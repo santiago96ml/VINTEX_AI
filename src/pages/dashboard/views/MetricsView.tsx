@@ -1,7 +1,6 @@
-import React from 'react';
 import { TrendingUp, Users, Calendar, Activity } from 'lucide-react';
 
-export const MetricsView = ({ citas, pacientes, doctores }: any) => {
+export const MetricsView = ({ citas, pacientes }: any) => {
   
   const totalCitas = citas.length;
   const citasHoy = citas.filter((c: any) => new Date(c.fecha_hora).toDateString() === new Date().toDateString()).length;

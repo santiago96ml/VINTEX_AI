@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, MessageSquare, Loader2 } from 'lucide-react';
-// CORRECCIÓN AQUÍ: La ruta correcta para llegar a features desde pages/dashboard/modals
 import { ChatViewer } from '../../../features/chat/ChatViewer'; 
 
 export const ChatModal = ({ patient, onClose, satelliteFetch }: any) => {

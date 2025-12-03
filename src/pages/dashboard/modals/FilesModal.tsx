@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, UploadCloud, FileText, Image as ImageIcon, Download, Trash2, Loader2 } from 'lucide-react';
+import { X, UploadCloud, FileText, Image as ImageIcon, Download, Loader2 } from 'lucide-react';
 import { useStorage } from '../../../hooks/useStorage';
 
 export const FilesModal = ({ patient, onClose, satelliteFetch }: any) => {

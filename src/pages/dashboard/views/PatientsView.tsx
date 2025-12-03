@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Phone, Calendar, Bot, MessageSquare, FolderOpen, AlertCircle, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Phone, Calendar, MessageSquare, FolderOpen, AlertCircle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ChatModal } from '../modals/ChatModal';
 import { FilesModal } from '../modals/FilesModal';

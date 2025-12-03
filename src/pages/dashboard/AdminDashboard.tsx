@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Users, DollarSign, Activity, Server, Search, AlertTriangle, 
-  CheckCircle, XCircle, Phone, Clock, Database, Power, MoreVertical, FileText
+  Database, MoreVertical, FileText, Power, Phone // <--- FALTABAN ESTOS IMPORTs
 } from 'lucide-react';
-import { GlassCard } from '../../components/ui/GlassCard';
 
-// --- MOCK DATA (Simulando lo que vendría del Backend Master) ---
+// --- COMPONENTE UI LOCAL (Para reemplazar la importación externa si no la tienes a mano) ---
+// Si ya tienes el archivo, puedes descomentar tu import original y borrar esto.
+const GlassCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
+  <div className={`backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl ${className}`}>
+    {children}
+  </div>
+);
+// import { GlassCard } from '../../components/ui/GlassCard'; // <--- Tu import original
+
+// --- MOCK DATA ---
 const mockUsers = [
   { 
     id: '1', 
@@ -16,8 +24,8 @@ const mockUsers = [
     debt: 0, 
     demoRemaining: null,
     n8n_executions: 15400,
-    cost: 45, // Costo operativo
-    revenue: 299, // Lo que pagan
+    cost: 45, 
+    revenue: 299, 
     last_call: '2024-01-15: Revisión de flujo de WhatsApp. Cliente satisfecho.',
     resources: { bot: true, web: true },
     joined: '2023-08-01'
@@ -27,14 +35,14 @@ const mockUsers = [
     name: 'Dr. Roberto Gomez', 
     email: 'roberto@gomez.com', 
     plan: 'Pro (Mensual)', 
-    status: 'past_due', // ADEUDA
+    status: 'past_due', 
     debt: 150, 
     demoRemaining: null,
     n8n_executions: 2300,
     cost: 12,
     revenue: 99,
     last_call: '2024-02-01: Reclamo por caída del bot. Se reinició instancia.',
-    resources: { bot: false, web: true }, // Bot apagado por falta de pago
+    resources: { bot: false, web: true }, 
     joined: '2023-11-10'
   },
   { 
@@ -56,20 +64,21 @@ const mockUsers = [
 
 export const AdminDashboard = () => {
   const [filter, setFilter] = useState('');
-  const [selectedUser, setSelectedUser] = useState<any>(null); // Para ver detalles
+  const [selectedUser, setSelectedUser] = useState<any>(null); 
 
-  // Filtrado simple
   const filteredUsers = mockUsers.filter(u => 
     u.name.toLowerCase().includes(filter.toLowerCase()) || 
     u.email.toLowerCase().includes(filter.toLowerCase())
   );
 
   return (
+    // Nota: Asegúrate de tener configurado 'neon-main' en tu tailwind.config.js
+    // o reemplaza 'text-neon-main' por un color estándar como 'text-purple-500'
     <div className="min-h-screen bg-[#050505] p-6 pt-24 text-gray-200 font-sans relative overflow-hidden">
       
       {/* Fondo Ambiental */}
       <div className="fixed top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none" />
-      <div className="fixed top-[-10%] right-[-10%] w-[600px] h-[600px] bg-neon-main/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed top-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto space-y-8 relative z-10">
         
@@ -77,7 +86,7 @@ export const AdminDashboard = () => {
         <div className="flex flex-col md:flex-row justify-between items-end gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <span className="text-neon-main text-4xl">⚡</span> God Mode
+              <span className="text-purple-500 text-4xl">⚡</span> God Mode
             </h1>
             <p className="text-gray-500 text-sm mt-1">Administración centralizada de infraestructura y facturación.</p>
           </div>
@@ -98,7 +107,7 @@ export const AdminDashboard = () => {
             { label: 'Ingresos (MRR)', val: '$12,450', sub: '+12% vs mes anterior', icon: DollarSign, color: 'text-green-400', bg: 'bg-green-500/10' },
             { label: 'Usuarios Totales', val: '142', sub: '12 demos activas', icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
             { label: 'Costo Operativo', val: '$3,200', sub: 'N8N + Supabase', icon: Server, color: 'text-red-400', bg: 'bg-red-500/10' },
-            { label: 'Ejecuciones Bot', val: '1.2M', sub: 'Últimos 30 días', icon: Activity, color: 'text-neon-main', bg: 'bg-neon-main/10' },
+            { label: 'Ejecuciones Bot', val: '1.2M', sub: 'Últimos 30 días', icon: Activity, color: 'text-purple-500', bg: 'bg-purple-500/10' },
           ].map((stat, i) => (
             <GlassCard key={i} className="flex items-center gap-4 p-5 hover:border-white/20 transition-colors">
               <div className={`p-3 rounded-lg ${stat.bg} ${stat.color}`}>
@@ -118,14 +127,14 @@ export const AdminDashboard = () => {
           {/* Toolbar Tabla */}
           <div className="p-5 border-b border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 bg-[#0A0A0A]/50">
             <h3 className="font-bold text-white flex items-center gap-2">
-              <Users size={18} className="text-neon-main"/> Directorio de Clientes
+              <Users size={18} className="text-purple-500"/> Directorio de Clientes
             </h3>
             <div className="relative w-full md:w-96">
               <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
               <input 
                 type="text" 
                 placeholder="Buscar cliente, email o ID..." 
-                className="w-full bg-[#151515] border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-neon-main focus:outline-none transition-all"
+                className="w-full bg-[#151515] border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-purple-500 focus:outline-none transition-all"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               />
@@ -185,7 +194,7 @@ export const AdminDashboard = () => {
                             <div className="w-px h-6 bg-white/10"></div>
                             <div>
                                 <span className="block text-gray-500 mb-0.5">Ejecuciones</span>
-                                <span className="text-neon-main font-mono">{user.n8n_executions.toLocaleString()}</span>
+                                <span className="text-purple-500 font-mono">{user.n8n_executions.toLocaleString()}</span>
                             </div>
                         </div>
                     </td>
@@ -239,7 +248,9 @@ export const AdminDashboard = () => {
                     
                     {/* Sección Control de Sistemas (Kill Switch) */}
                     <div>
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Power size={14}/> Control de Sistemas</h4>
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <Power size={14}/> Control de Sistemas
+                        </h4>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-[#050505] border border-white/10 p-4 rounded-xl flex justify-between items-center">
                                 <div>
@@ -248,7 +259,7 @@ export const AdminDashboard = () => {
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" className="sr-only peer" checked={selectedUser.resources.bot} onChange={() => {}} />
-                                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon-main"></div>
+                                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
                                 </label>
                             </div>
                             <div className="bg-[#050505] border border-white/10 p-4 rounded-xl flex justify-between items-center">
@@ -266,7 +277,9 @@ export const AdminDashboard = () => {
 
                     {/* Historial de Llamadas / Soporte */}
                     <div>
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Phone size={14}/> Bitácora de Contacto</h4>
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <Phone size={14}/> Bitácora de Contacto
+                        </h4>
                         <div className="bg-[#050505] border border-white/10 rounded-xl p-4">
                             <div className="flex gap-4 items-start">
                                 <div className="mt-1 bg-gray-800 p-2 rounded-full text-gray-400"><FileText size={16}/></div>
@@ -284,7 +297,7 @@ export const AdminDashboard = () => {
                 </div>
 
                 <div className="p-4 bg-[#16171a] border-t border-white/10 flex justify-end gap-3">
-                    <button onClick={() => setSelectedUser(null)} className="px-4 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white hover:bg-white/5 transition-colors">Cerrar</button>
+                    <button onClick={() => setSelectedUser(null)} className="px-4 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white hover:bg-white/10 transition-colors">Cerrar</button>
                     {/* Botón Peligroso */}
                     <button className="px-4 py-2 rounded-lg text-sm font-bold bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-colors border border-red-500/20">
                         Suspender Cuenta

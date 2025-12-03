@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Users, Stethoscope, BarChart2, LogOut, Menu } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { AgendaView } from '../../pages/dashboard/views/AgendaView';
@@ -20,7 +20,6 @@ export const UserDashboard = () => {
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [doctores, setDoctores] = useState<any[]>([]);
   const [citas, setCitas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // --- LÓGICA DE CONEXIÓN ---
   const satelliteFetch = useCallback(async (endpoint: string, opts: any = {}) => {
@@ -51,7 +50,9 @@ export const UserDashboard = () => {
         setDoctores(initData.doctores || []);
       }
       if (citasData) setCitas(citasData);
-    } finally { setLoading(false); }
+    } finally { 
+      // Loading removed as per cleanup
+    }
   }, [satelliteFetch, session]);
 
   useEffect(() => {
