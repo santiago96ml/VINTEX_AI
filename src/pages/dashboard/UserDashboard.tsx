@@ -7,8 +7,8 @@ import { DoctorsView } from '../../pages/dashboard/views/DoctorsView';
 import { MetricsView } from '../../pages/dashboard/views/MetricsView';
 import { useRealtime } from '../../hooks/useRealtime';
 
-const MASTER_API = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
-const SATELLITE_API = 'https://webs-de-vintex-bakend-de-clinica.1kh9sk.easypanel.host';
+const MASTER_API = 'https://api-master.vintex.net.br/';
+const SATELLITE_API = 'https://api-clinica.vintex.net.br/';
 
 export const UserDashboard = () => {
   const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes' | 'doctores' | 'metricas'>('agenda');
