@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { ParticleNetwork } from './components/canvas/ParticleNetwork';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
+import { Toaster } from "@/components/ui/toaster"
 
 // Importación de páginas
 import { Home } from './pages/Home';
@@ -27,20 +28,13 @@ const ScrollToTop = () => {
 // Componente Layout para manejar la lógica de mostrar/ocultar Navbar y Footer
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  // Definimos las rutas donde NO queremos que aparezca el Navbar/Footer
   const hideLayoutPaths = ['/dashboard'];
-
-  // Verificamos si la ruta actual empieza con alguna de las rutas excluidas
   const shouldHideLayout = hideLayoutPaths.some(path => location.pathname.startsWith(path));
 
   return (
     <>
-      {/* Solo mostramos Navbar si NO estamos en dashboard */}
       {!shouldHideLayout && <Navbar />}
-      
       {children}
-      
-      {/* Solo mostramos Footer si NO estamos en dashboard */}
       {!shouldHideLayout && <Footer />}
     </>
   );
@@ -72,14 +66,14 @@ function App() {
       <main className="relative bg-tech-black text-gray-main min-h-screen font-sans selection:bg-neon-main selection:text-black overflow-x-hidden">
         <ParticleNetwork />
         
-        {/* Envolvemos las rutas con el Layout condicional */}
         <Layout>
           <AnimatedRoutes />
         </Layout>
         
+        <Toaster />
       </main>
     </Router>
   );
 }
 
-export default App;
+export default App; 
