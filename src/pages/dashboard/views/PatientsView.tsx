@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Search, Phone, Calendar, MessageSquare, FolderOpen, AlertCircle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
-import { ChatModal } from '../modals/ChatModal';
+// CORRECCIÓN 1: Importación por defecto (sin llaves) porque es 'export default'
+import ChatModal from '../modals/ChatModal'; 
 import { FilesModal } from '../modals/FilesModal';
 
 export const PatientsView = ({ pacientes, citas, satelliteFetch, reload }: any) => {
@@ -117,11 +118,12 @@ export const PatientsView = ({ pacientes, citas, satelliteFetch, reload }: any) 
         })}
       </div>
 
+      {/* CORRECCIÓN 2: Props actualizados para coincidir con ChatModal.tsx */}
       {modalType === 'chat' && (
         <ChatModal 
-          patient={selectedPatient} 
+          isOpen={true} 
           onClose={() => setModalType(null)} 
-          satelliteFetch={satelliteFetch} 
+          telefonoCliente={selectedPatient?.telefono}
         />
       )}
       

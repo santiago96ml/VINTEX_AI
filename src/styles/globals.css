@@ -1,21 +1,10 @@
-/* 1. IMPORTS: Unificamos Inter y Orbitron (para coincidir con tu config) */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 2. BASE: Estilos fundamentales */
 @layer base {
-  body {
-    /* Usamos 'bg-tech-bg' (el tono #0D0D0F) y 'text-gray-main' para consistencia */
-    @apply bg-tech-bg text-gray-main font-sans antialiased overflow-x-hidden;
-  }
-
-  /* Todos los títulos usarán la fuente tecnológica Orbitron */
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-display text-white;
-  }
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
@@ -43,6 +32,7 @@
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
+
   .dark {
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
@@ -69,9 +59,20 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+
+  body {
+    @apply bg-tech-bg text-gray-main font-sans antialiased overflow-x-hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display text-white;
+  }
+
+  * {
+    @apply border-border;
+  }
 }
 
-/* 3. COMPONENTS: Elementos reutilizables (Botones, Inputs) */
 @layer components {
   .dark-input {
     @apply bg-tech-input border border-gray-700 text-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-neon-main focus:ring-1 focus:ring-neon-main transition-all w-full;
@@ -86,21 +87,17 @@
   }
 }
 
-/* 4. UTILITIES: Efectos visuales específicos */
 @layer utilities {
   .text-neon-gradient {
     @apply bg-cyber-gradient bg-clip-text text-transparent;
   }
   
-  /* Borde brillante sutil */
   .border-glow {
     @apply border border-white/10 hover:border-neon-main/50 transition-colors duration-300;
   }
 }
 
-/* 5. ESTILOS GLOBALES / LEGACY (No dependen de capas Tailwind) */
-
-/* Scrollbar personalizada */
+/* Estilos globales que no dependen de capas Tailwind */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -113,7 +110,6 @@
   border-radius: 10px;
 }
 
-/* Efecto para columnas de doctores inactivos en agenda */
 .inactive-column {
   background-image: repeating-linear-gradient(
     45deg, 
@@ -122,13 +118,4 @@
     rgba(50, 53, 60, 0.5) 10px, 
     rgba(50, 53, 60, 0.5) 20px
   );
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
 }
