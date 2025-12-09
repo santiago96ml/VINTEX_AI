@@ -23,6 +23,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
+    /* Tipos de Vite (SOLUCIÓN ERROR 1) */
+    "types": ["vite/client"],
+
     /* Paths */
     "baseUrl": ".",
     "paths": {
