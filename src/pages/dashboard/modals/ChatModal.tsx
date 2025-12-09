@@ -1,61 +1,64 @@
-import { useState, useEffect } from 'react';
-import { X, MessageSquare, Loader2 } from 'lucide-react';
-import { ChatViewer } from '../../../features/chat/ChatViewer'; 
+import { useEffect, useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import axios from 'axios';
 
-export const ChatModal = ({ patient, onClose, satelliteFetch }: any) => {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+interface ChatModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  telefonoCliente: string; // El número de teléfono es la clave de búsqueda
+}
+
+export default function ChatModal({ isOpen, onClose, telefonoCliente }: ChatModalProps) {
+  const [mensajes, setMensajes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const loadChat = async () => {
-      // Validación extra: si no hay teléfono, no intentamos cargar
-      if (!patient?.telefono) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const data = await satelliteFetch(`/chat-history/${patient.telefono}`);
-        if (data) setMessages(data);
-      } catch (error) {
-        console.error("Error cargando chat", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadChat();
-  }, [patient, satelliteFetch]);
+    if (isOpen && telefonoCliente) {
+      setLoading(true);
+      const token = localStorage.getItem('access_token');
+      
+      // Llamada al nuevo endpoint de historial
+      axios.get(`${import.meta.env.VITE_API_URL}/api/chat-history/${telefonoCliente}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => setMensajes(res.data))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+    }
+  }, [isOpen, telefonoCliente]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[#1a1c20] w-full max-w-2xl h-[80vh] rounded-2xl border border-gray-800 shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl h-[80vh]">
+        <DialogHeader>
+          <DialogTitle>Historial de Chat (IA)</DialogTitle>
+        </DialogHeader>
         
-        {/* HEADER */}
-        <div className="p-4 border-b border-gray-800 bg-tech-card flex justify-between items-center">
-          <div>
-            <h3 className="text-white font-bold flex items-center gap-2">
-              <MessageSquare className="text-neon-main" size={20} /> Historial de Chat
-            </h3>
-            <p className="text-sm text-gray-400">Paciente: {patient?.nombre || 'Desconocido'}</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors"><X size={24}/></button>
-        </div>
-
-        {/* CONTENT */}
-        <div className="flex-1 overflow-hidden relative bg-[#0F0F0F]">
+        <ScrollArea className="h-full pr-4">
           {loading ? (
-            <div className="absolute inset-0 flex items-center justify-center text-neon-main">
-              <Loader2 className="animate-spin" size={32} />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
-              <MessageSquare size={48} className="mb-2 opacity-20" />
-              <p>No hay historial de chat para este número.</p>
-            </div>
+            <div className="text-center py-10">Cargando conversación...</div>
+          ) : mensajes.length === 0 ? (
+            <div className="text-center py-10 text-gray-500">No hay historial disponible para este número.</div>
           ) : (
-            <ChatViewer messages={messages} />
+            <div className="space-y-4">
+              {mensajes.map((msg, idx) => (
+                // Asumiendo que la estructura JSON de tu N8N guarda rol y contenido
+                <div key={idx} className={`flex ${msg.message?.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`p-3 rounded-lg max-w-[80%] ${
+                    msg.message?.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
+                  }`}>
+                    <p className="text-sm">{msg.message?.content || JSON.stringify(msg.message)}</p>
+                    <span className="text-xs text-gray-400 block mt-1">
+                      {new Date(msg.created_at || Date.now()).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
-      </div>
-    </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
