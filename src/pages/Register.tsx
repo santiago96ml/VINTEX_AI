@@ -47,7 +47,8 @@ export const Register: React.FC = () => {
       if (result.session) {
           localStorage.setItem('vintex_session', JSON.stringify(result.session));
           localStorage.setItem('vintex_user', JSON.stringify(result.user));
-          navigate('/dashboard');
+          // CAMBIO REALIZADO: Redirigir al onboarding para completar el perfil y pagar
+          navigate('/onboarding');
       } else {
           // Opción B: Redirigir al login si requiere confirmación de email
           navigate('/login');
@@ -79,6 +80,7 @@ export const Register: React.FC = () => {
              <p className="text-gray-400 text-sm">Comienza tu prueba gratuita hoy</p>
           </div>
 
+          {/* Aquí se mantiene intacta la funcionalidad de registro con Google */}
           <SocialButtons />
 
           <div className="relative my-6 flex items-center justify-center">
