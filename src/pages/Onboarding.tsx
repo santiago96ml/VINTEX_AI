@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, FileText, CreditCard, Loader2, CheckCircle } from 'lucide-react';
+import { Building2, FileText, CreditCard, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 
 export const Onboarding: React.FC = () => {
@@ -10,32 +10,43 @@ export const Onboarding: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'survey' | 'payment' | 'building'>('survey');
 
-  // URL del Backend Maestro
+  // ESTADO PARA GUARDAR LOS DATOS (Evita el error de null)
+  const [formData, setFormData] = useState({
+    companyName: '',
+    description: ''
+  });
+
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-master.vintex.net.br';
 
   const handleSurveySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setStep('payment'); // Pasar al pago tras llenar datos
+    if (!formData.companyName.trim() || !formData.description.trim()) {
+        toast({ variant: "destructive", title: "Campos vacíos", description: "Por favor completa la información de tu empresa." });
+        return;
+    }
+    setStep('payment'); 
   };
 
   const handlePaymentAndBuild = async () => {
     setLoading(true);
-    setStep('building'); // Mostrar pantalla de "Construyendo"
+    setStep('building'); 
 
     try {
-      // Recuperar sesión guardada en Login/Register
       const sessionStr = localStorage.getItem('vintex_session');
-      if (!sessionStr) throw new Error("No hay sesión. Regístrate primero.");
+      // Intento de recuperación de sesión si localStorage falla (ej: Google Login fresco)
+      // Aunque AuthGuard ya garantiza sesión, esto es un fallback de seguridad.
+      if (!sessionStr) {
+         throw new Error("Sesión no detectada. Por favor recarga la página.");
+      }
       const session = JSON.parse(sessionStr);
 
-      // Datos del formulario (puedes usar estados para capturarlos)
+      // Usamos los datos del estado (formData) en lugar de buscar en el DOM
       const businessData = {
-        companyName: (document.getElementById('companyName') as HTMLInputElement).value,
-        description: (document.getElementById('description') as HTMLTextAreaElement).value,
+        companyName: formData.companyName,
+        description: formData.description,
         requirements: "Gestión de turnos y clientes"
       };
 
-      // LLAMADA AL BACKEND MAESTRO
       const response = await fetch(`${API_URL}/api/onboarding/complete`, {
         method: 'POST',
         headers: {
@@ -45,12 +56,15 @@ export const Onboarding: React.FC = () => {
         body: JSON.stringify(businessData)
       });
 
-      if (!response.ok) throw new Error('Error iniciando la automatización');
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error iniciando la automatización');
+      }
 
-      toast({ title: "¡Pago exitoso!", description: "Tu sistema se está creando..." });
+      toast({ title: "¡Todo listo!", description: "Tu sistema se está construyendo." });
       
-      // Esperar unos segundos para efecto visual o redirigir
-      setTimeout(() => navigate('/dashboard'), 3000);
+      // Damos tiempo a n8n para que cree la fila en web_clinica
+      setTimeout(() => navigate('/dashboard'), 4000);
 
     } catch (error: any) {
       console.error(error);
@@ -74,11 +88,24 @@ export const Onboarding: React.FC = () => {
             <form onSubmit={handleSurveySubmit} className="space-y-6">
               <div>
                 <label className="text-gray-400 block mb-2">Nombre de tu Empresa</label>
-                <input id="companyName" required className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none" placeholder="Ej: Clínica San Lucas" />
+                <input 
+                  required 
+                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none placeholder-gray-600" 
+                  placeholder="Ej: Clínica San Lucas"
+                  value={formData.companyName}
+                  onChange={(e) => setFormData({...formData, companyName: e.target.value})}
+                />
               </div>
               <div>
                 <label className="text-gray-400 block mb-2">¿A qué se dedican? (Para la IA)</label>
-                <textarea id="description" required rows={4} className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none" placeholder="Somos una clínica dental con 3 doctores..." />
+                <textarea 
+                  required 
+                  rows={4} 
+                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none placeholder-gray-600" 
+                  placeholder="Ej: Somos una clínica dental con 3 doctores, necesitamos gestionar citas y expedientes..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                />
               </div>
               <button type="submit" className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-200 transition-colors">
                 Continuar al Pago
