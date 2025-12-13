@@ -82,7 +82,8 @@ export default {
   		},
   		backgroundImage: {
   			'cyber-gradient': 'linear-gradient(135deg, #00FF99 0%, #00D1B2 100%)',
-  			'grid-pattern': 'url(\\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%2300FF99' fill-opacity='0.03' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E\\")'
+            // CORRECCIÓN: Uso de comillas dobles externas para evitar conflicto con las simples internas del SVG
+  			'grid-pattern': "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%2300FF99' fill-opacity='0.03' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E\")"
   		},
   		boxShadow: {
   			neon: '0 0 20px -5px rgba(0, 255, 153, 0.4)',
