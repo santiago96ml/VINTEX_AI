@@ -13,7 +13,7 @@ export const Register: React.FC = () => {
   // Si es modo desarrollo, usamos '' para que el Proxy de vite.config.ts haga su trabajo.
   const API_URL = import.meta.env.DEV 
     ? '' 
-    : (import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host');
+    : (import.meta.env.VITE_API_BASE_URL || 'https://api-master.vintex.net.br');
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
