@@ -8,7 +8,9 @@ export const SocialButtons: React.FC = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`, 
+          // CAMBIO CLAVE: Redirigir al origen (home) en lugar de dashboard.
+          // El AuthGuard de App.tsx se encargará de redirigir a /onboarding si es usuario nuevo.
+          redirectTo: `${window.location.origin}/`, 
         },
       });
       if (error) throw error;
