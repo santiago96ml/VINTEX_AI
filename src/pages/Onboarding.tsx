@@ -1,23 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, CreditCard, Loader2, LogOut } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, LogOut } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabaseClient';
+
+interface Message {
+  role: 'assistant' | 'user' | 'system';
+  content: string;
+}
 
 export const Onboarding: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  const [messages, setMessages] = useState<Message[]>([
+    { 
+      role: 'assistant', 
+      content: "¡Hola! Soy el Arquitecto de Vintex AI. Voy a diseñar tu sistema a medida. Para empezar, ¿cuál es el nombre de tu empresa y a qué se dedican?" 
+    }
+  ]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'survey' | 'payment' | 'building'>('survey');
+  const [isBuilding, setIsBuilding] = useState(false);
 
-  // 1. ESTADO PARA GUARDAR DATOS (Evita que se pierdan al cambiar de pantalla)
-  const [formData, setFormData] = useState({
-    companyName: '',
-    description: ''
-  });
+  // ✅ URL ACTUALIZADA: Apunta a tu servidor Hostinger (Easypanel)
+  const API_URL = import.meta.env.DEV 
+    ? 'http://localhost:3000' 
+    : 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
-const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+  // Auto-scroll al último mensaje
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -26,29 +44,55 @@ const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
     navigate('/login');
   };
 
-  const handleSurveySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!formData.companyName.trim() || !formData.description.trim()) {
-        toast({ variant: "destructive", title: "Campos vacíos", description: "Por favor completa la información." });
-        return;
-    }
-    setStep('payment'); 
-  };
+  const handleSend = async () => {
+    if (!input.trim()) return;
 
-  const handlePaymentAndBuild = async () => {
+    const newMsg: Message = { role: 'user', content: input };
+    setMessages(prev => [...prev, newMsg]);
+    setInput('');
     setLoading(true);
-    setStep('building'); 
 
     try {
-      console.log(`📡 Conectando a Backend en: ${API_URL}`); // Para depurar
-
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Sesión expirada. Por favor inicia sesión de nuevo.");
+      if (!session) throw new Error("Sesión expirada");
 
-      const businessData = {
-        companyName: formData.companyName,
-        description: formData.description,
-        requirements: "Gestión de turnos y clientes"
+      const response = await fetch(`${API_URL}/api/onboarding/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ 
+          messages: [...messages, newMsg].filter(m => m.role !== 'system') 
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Error en el chat");
+
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinish = async () => {
+    setIsBuilding(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Recopilamos toda la conversación como "Contexto" para que n8n genere el SQL
+      const conversationSummary = messages
+        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+        .join('\n');
+
+      // Configuración base (el nombre real lo sacará n8n del resumen)
+      const schemaConfig = {
+        appName: "Nuevo Proyecto", 
+        type: "custom_ai_generated"
       };
 
       const response = await fetch(`${API_URL}/api/onboarding/complete`, {
@@ -57,37 +101,42 @@ const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify(businessData)
+        body: JSON.stringify({ schemaConfig, conversationSummary })
       });
 
-      if (!response.ok) {
-        // Intentar leer el error del backend si es posible
-        const errText = await response.text();
-        let errMsg = 'Error de conexión con el servidor.';
-        try {
-            const errJson = JSON.parse(errText);
-            errMsg = errJson.error || errMsg;
-        } catch (e) { console.warn("Respuesta no JSON:", errText); }
-        
-        throw new Error(errMsg);
-      }
+      if (!response.ok) throw new Error("Error iniciando construcción");
 
-      toast({ title: "¡Éxito!", description: "Tu sistema se está construyendo..." });
+      toast({ title: "¡Entendido!", description: "Estoy construyendo tu base de datos y web..." });
       
+      // Damos tiempo a n8n para procesar antes de ir al dashboard
       setTimeout(() => navigate('/dashboard'), 4000);
 
     } catch (error: any) {
-      console.error("Error Onboarding:", error);
-      toast({ variant: "destructive", title: "Error", description: error.message });
-      setStep('payment'); 
-    } finally {
-      setLoading(false);
+      console.error(error);
+      setIsBuilding(false);
+      toast({ variant: "destructive", title: "Error", description: "No se pudo conectar con el Arquitecto." });
     }
   };
 
+  if (isBuilding) {
+    return (
+      <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center text-center p-4">
+        <div className="relative">
+          <div className="absolute inset-0 bg-neon-main blur-xl opacity-20 animate-pulse"></div>
+          <Loader2 className="w-20 h-20 text-neon-main animate-spin relative z-10" />
+        </div>
+        <h2 className="text-3xl font-bold text-white mt-8 mb-2">Diseñando Arquitectura</h2>
+        <p className="text-gray-400 max-w-md">
+          La IA está creando tus tablas, relaciones y panel de control basándose en nuestra conversación.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-tech-black flex items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center p-4 md:p-8 relative">
       
+      {/* Botón de Salida de Emergencia */}
       <button 
         onClick={handleLogout} 
         className="absolute top-6 right-6 text-gray-500 hover:text-white flex items-center gap-2 text-sm transition-colors z-10"
@@ -95,62 +144,97 @@ const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
         <LogOut size={16} /> Cerrar Sesión
       </button>
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl w-full">
-        
-        {step === 'survey' && (
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-8">
-            <h2 className="text-3xl font-bold text-white mb-6 flex gap-3 items-center">
-              <Building2 className="text-neon-main" /> Configura tu Espacio
-            </h2>
-            <form onSubmit={handleSurveySubmit} className="space-y-6">
-              <div>
-                <label className="text-gray-400 block mb-2">Nombre de tu Empresa</label>
-                <input 
-                  required 
-                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none placeholder-gray-600" 
-                  placeholder="Ej: Clínica San Lucas"
-                  value={formData.companyName}
-                  onChange={(e) => setFormData({...formData, companyName: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="text-gray-400 block mb-2">¿A qué se dedican? (Para la IA)</label>
-                <textarea 
-                  required 
-                  rows={4} 
-                  className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none placeholder-gray-600" 
-                  placeholder="Ej: Somos una clínica dental..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                />
-              </div>
-              <button type="submit" className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-200 transition-colors">
-                Continuar al Pago
-              </button>
-            </form>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-3xl bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[80vh]"
+      >
+        {/* Header */}
+        <div className="bg-[#111] p-4 border-b border-white/5 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-neon-main/10 flex items-center justify-center">
+              <Bot className="text-neon-main" size={20} />
+            </div>
+            <div>
+              <h2 className="font-bold text-white">Vintex Architect</h2>
+              <p className="text-xs text-green-400 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"/> En línea
+              </p>
+            </div>
           </div>
-        )}
-
-        {step === 'payment' && (
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-8 text-center">
-            <CreditCard className="w-16 h-16 text-neon-main mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Suscripción Pro</h2>
-            <p className="text-gray-400 mb-8">$29.99 / mes - Cancela cuando quieras</p>
-            
-            <button onClick={handlePaymentAndBuild} disabled={loading} className="w-full bg-neon-main hover:bg-neon-main/80 text-black font-bold py-4 rounded-xl transition-colors flex justify-center items-center gap-2">
-              {loading ? <Loader2 className="animate-spin" /> : "Pagar y Crear Sistema"}
+          
+          {/* Botón para finalizar manualmente si la charla se extiende */}
+          {messages.length > 3 && (
+            <button 
+              onClick={handleFinish}
+              className="bg-white hover:bg-gray-200 text-black text-xs font-bold py-2 px-4 rounded-full transition-colors flex items-center gap-2"
+            >
+              <Sparkles size={14} /> Construir Ahora
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {step === 'building' && (
-          <div className="text-center">
-            <Loader2 className="w-20 h-20 text-neon-main animate-spin mx-auto mb-6" />
-            <h2 className="text-3xl font-bold text-white mb-4">La IA está trabajando...</h2>
-            <p className="text-gray-400">Diseñando base de datos, configurando servidores y aplicando permisos.</p>
-          </div>
-        )}
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
+          {messages.map((msg, idx) => (
+            <motion.div 
+              key={idx}
+              initial={{ opacity: 0, x: msg.role === 'assistant' ? -20 : 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+            >
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                msg.role === 'assistant' ? 'bg-neon-main/20 text-neon-main' : 'bg-white/10 text-white'
+              }`}>
+                {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
+              </div>
+              
+              <div className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed ${
+                msg.role === 'assistant' 
+                  ? 'bg-[#1A1A1A] text-gray-200 rounded-tl-none border border-white/5' 
+                  : 'bg-neon-main text-black font-medium rounded-tr-none'
+              }`}>
+                {msg.content}
+              </div>
+            </motion.div>
+          ))}
+          
+          {loading && (
+            <div className="flex gap-4">
+              <div className="w-8 h-8 rounded-full bg-neon-main/20 text-neon-main flex items-center justify-center">
+                <Bot size={16} />
+              </div>
+              <div className="bg-[#1A1A1A] p-4 rounded-2xl rounded-tl-none border border-white/5 flex gap-1 items-center">
+                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}/>
+                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}/>
+                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}/>
+              </div>
+            </div>
+          )}
+        </div>
 
+        {/* Input Area */}
+        <div className="p-4 bg-[#111] border-t border-white/5">
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+            className="relative flex items-center"
+          >
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Describe tu negocio..."
+              className="w-full bg-[#0A0A0A] border border-white/10 rounded-xl py-4 pl-6 pr-14 text-white focus:border-neon-main/50 outline-none placeholder-gray-600 transition-all"
+              disabled={loading}
+            />
+            <button 
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="absolute right-2 p-2 bg-neon-main rounded-lg text-black hover:bg-neon-main/80 disabled:opacity-50 disabled:hover:bg-neon-main transition-colors"
+            >
+              <Send size={18} />
+            </button>
+          </form>
+        </div>
       </motion.div>
     </div>
   );

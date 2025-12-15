@@ -9,8 +9,10 @@ export const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // CORRECCIÓN DE CONEXIÓN
-  const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+  // ✅ URL ACTUALIZADA: Apunta a tu servidor Hostinger
+  const API_URL = import.meta.env.DEV 
+    ? 'http://localhost:3000' 
+    : 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -36,7 +38,7 @@ export const Register: React.FC = () => {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Error al registrarse.');
+        throw new Error(result.error || 'Error al registrarse. Intenta nuevamente.');
       }
 
       if (result.session) {
@@ -57,7 +59,7 @@ export const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen pt-20 flex items-center justify-center p-4 relative overflow-hidden bg-tech-black">
-      {/* ... (Resto del diseño igual) ... */}
+      {/* Fondo decorativo */}
       <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[120px] -z-10" />
       <div className="absolute bottom-1/4 left-1/4 w-[500px] h-[500px] bg-neon-main/5 rounded-full blur-[120px] -z-10" />
 
