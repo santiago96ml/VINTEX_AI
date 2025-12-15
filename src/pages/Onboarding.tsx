@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Bot, User, Loader2, Sparkles, LogOut } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabaseClient';
@@ -60,7 +60,7 @@ export const Onboarding: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${session.access_token}` // TypeScript ahora sabe que session no es null
         },
         body: JSON.stringify({ 
           messages: [...messages, newMsg].filter(m => m.role !== 'system') 
@@ -84,6 +84,9 @@ export const Onboarding: React.FC = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
+      // Verificación de seguridad explícita para TypeScript
+      if (!session) throw new Error("Sesión no válida.");
+
       // Recopilamos toda la conversación como "Contexto" para que n8n genere el SQL
       const conversationSummary = messages
         .map(m => `${m.role.toUpperCase()}: ${m.content}`)
@@ -99,7 +102,7 @@ export const Onboarding: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${session.access_token}` // Aquí estaba el error, ahora está protegido
         },
         body: JSON.stringify({ schemaConfig, conversationSummary })
       });
