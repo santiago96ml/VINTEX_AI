@@ -8,7 +8,7 @@ export const SocialButtons: React.FC = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Redirigimos a la raíz. El AuthGuard de App.tsx se encargará del resto.
+          // IMPORTANTE: Redirigir a la raíz para que el AuthGuard decida el destino
           redirectTo: `${window.location.origin}/`, 
         },
       });

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, FileText, CreditCard, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Building2, CreditCard, Loader2, LogOut } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { supabase } from '../lib/supabaseClient';
 
 export const Onboarding: React.FC = () => {
   const navigate = useNavigate();
@@ -10,18 +11,25 @@ export const Onboarding: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'survey' | 'payment' | 'building'>('survey');
 
-  // ESTADO PARA GUARDAR LOS DATOS (Evita el error de null)
+  // 1. ESTADO PARA GUARDAR DATOS (Evita que se pierdan al cambiar de pantalla)
   const [formData, setFormData] = useState({
     companyName: '',
     description: ''
   });
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-master.vintex.net.br';
+const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('vintex_session');
+    localStorage.removeItem('vintex_user');
+    navigate('/login');
+  };
 
   const handleSurveySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.companyName.trim() || !formData.description.trim()) {
-        toast({ variant: "destructive", title: "Campos vacíos", description: "Por favor completa la información de tu empresa." });
+        toast({ variant: "destructive", title: "Campos vacíos", description: "Por favor completa la información." });
         return;
     }
     setStep('payment'); 
@@ -32,15 +40,11 @@ export const Onboarding: React.FC = () => {
     setStep('building'); 
 
     try {
-      const sessionStr = localStorage.getItem('vintex_session');
-      // Intento de recuperación de sesión si localStorage falla (ej: Google Login fresco)
-      // Aunque AuthGuard ya garantiza sesión, esto es un fallback de seguridad.
-      if (!sessionStr) {
-         throw new Error("Sesión no detectada. Por favor recarga la página.");
-      }
-      const session = JSON.parse(sessionStr);
+      console.log(`📡 Conectando a Backend en: ${API_URL}`); // Para depurar
 
-      // Usamos los datos del estado (formData) en lugar de buscar en el DOM
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sesión expirada. Por favor inicia sesión de nuevo.");
+
       const businessData = {
         companyName: formData.companyName,
         description: formData.description,
@@ -57,29 +61,42 @@ export const Onboarding: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Error iniciando la automatización');
+        // Intentar leer el error del backend si es posible
+        const errText = await response.text();
+        let errMsg = 'Error de conexión con el servidor.';
+        try {
+            const errJson = JSON.parse(errText);
+            errMsg = errJson.error || errMsg;
+        } catch (e) { console.warn("Respuesta no JSON:", errText); }
+        
+        throw new Error(errMsg);
       }
 
-      toast({ title: "¡Todo listo!", description: "Tu sistema se está construyendo." });
+      toast({ title: "¡Éxito!", description: "Tu sistema se está construyendo..." });
       
-      // Damos tiempo a n8n para que cree la fila en web_clinica
       setTimeout(() => navigate('/dashboard'), 4000);
 
     } catch (error: any) {
-      console.error(error);
+      console.error("Error Onboarding:", error);
       toast({ variant: "destructive", title: "Error", description: error.message });
-      setStep('payment'); // Volver atrás si falla
+      setStep('payment'); 
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-tech-black flex items-center justify-center p-4">
+    <div className="min-h-screen bg-tech-black flex items-center justify-center p-4 relative">
+      
+      <button 
+        onClick={handleLogout} 
+        className="absolute top-6 right-6 text-gray-500 hover:text-white flex items-center gap-2 text-sm transition-colors z-10"
+      >
+        <LogOut size={16} /> Cerrar Sesión
+      </button>
+
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl w-full">
         
-        {/* PASO 1: CUESTIONARIO */}
         {step === 'survey' && (
           <div className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-8">
             <h2 className="text-3xl font-bold text-white mb-6 flex gap-3 items-center">
@@ -102,7 +119,7 @@ export const Onboarding: React.FC = () => {
                   required 
                   rows={4} 
                   className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-white focus:border-neon-main outline-none placeholder-gray-600" 
-                  placeholder="Ej: Somos una clínica dental con 3 doctores, necesitamos gestionar citas y expedientes..."
+                  placeholder="Ej: Somos una clínica dental..."
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                 />
@@ -114,7 +131,6 @@ export const Onboarding: React.FC = () => {
           </div>
         )}
 
-        {/* PASO 2: PAGO (Simulado) */}
         {step === 'payment' && (
           <div className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-8 text-center">
             <CreditCard className="w-16 h-16 text-neon-main mx-auto mb-4" />
@@ -127,7 +143,6 @@ export const Onboarding: React.FC = () => {
           </div>
         )}
 
-        {/* PASO 3: CONSTRUYENDO */}
         {step === 'building' && (
           <div className="text-center">
             <Loader2 className="w-20 h-20 text-neon-main animate-spin mx-auto mb-6" />

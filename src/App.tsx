@@ -8,7 +8,6 @@ import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { Toaster } from "@/components/ui/toaster"
 
-// Importación de páginas
 import { Home } from './pages/Home';
 import { Solutions } from './pages/Solutions';
 import { Technology } from './pages/Technology';
@@ -17,7 +16,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
-import { Onboarding } from './pages/Onboarding'; // Asegúrate de importar esto
+import { Onboarding } from './pages/Onboarding'; 
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -27,7 +26,7 @@ const ScrollToTop = () => {
   return null;
 };
 
-// --- AUTH GUARD: El Portero Inteligente ---
+// --- AUTH GUARD (Versión Reparada) ---
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,19 +36,15 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
-      // Rutas públicas donde NO se fuerza login
       const publicRoutes = ['/', '/login', '/register', '/soluciones', '/tecnologia', '/casos-exito', '/demo'];
-      // Verificamos si la ruta actual es pública (exacta o empieza con...)
       const isPublicRoute = publicRoutes.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
 
       if (!session) {
-        // Si NO hay usuario y trata de entrar a ruta privada -> Login
-        if (!isPublicRoute && location.pathname !== '/') {
+        if (!isPublicRoute) {
            navigate('/login');
         }
       } else {
-        // SI HAY USUARIO: Verificamos si ya completó el registro (tiene clínica)
-        // Usamos .maybeSingle() para evitar el error 406 si no existe
+        // Uso .maybeSingle() para evitar errores si el usuario es nuevo
         const { data: clinic } = await supabase
           .from('web_clinica')
           .select('id')
@@ -58,19 +53,18 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
         const isOnboardingPage = location.pathname === '/onboarding';
         const isDashboardPage = location.pathname.startsWith('/dashboard');
-        // Si está en home o login estando logueado
-        const isAuthEntryPage = location.pathname === '/' || location.pathname === '/login' || location.pathname === '/register';
+        const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register';
+        const isHomePage = location.pathname === '/';
 
         if (clinic) {
-          // USUARIO VIEJO (Tiene clínica):
-          // Si intenta ir a onboarding o login -> Mandar al Dashboard
+          // Si YA tiene clínica, mandarlo al dashboard si intenta ir a onboarding/login
           if (isOnboardingPage || isAuthEntryPage) {
             navigate('/dashboard');
           }
         } else {
-          // USUARIO NUEVO (No tiene clínica):
-          // Si intenta ir a Dashboard o está en Home/Login -> Mandar a Onboarding
-          if (isDashboardPage || isAuthEntryPage) {
+          // Si NO tiene clínica, forzar onboarding SOLO si va al Dashboard o Home
+          // Dejamos libres login/register para que pueda cambiar de cuenta
+          if (isDashboardPage || isHomePage) {
             navigate('/onboarding');
           }
         }
@@ -80,7 +74,6 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
     checkSession();
 
-    // Escuchar cambios de sesión en vivo
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session) checkSession();
     });
@@ -88,12 +81,11 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, [navigate, location.pathname]);
 
-  if (loading) return <div className="min-h-screen bg-tech-black flex items-center justify-center text-neon-main">Cargando Vintex AI...</div>;
+  if (loading) return <div className="min-h-screen bg-tech-black flex items-center justify-center text-neon-main">Cargando...</div>;
 
   return <>{children}</>;
 };
 
-// Componente Layout para ocultar Navbar/Footer en Dashboard y Onboarding
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const hideLayoutPaths = ['/dashboard', '/onboarding'];

@@ -9,11 +9,8 @@ export const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // --- CORRECCIÓN DE CONEXIÓN (Igual que en Login) ---
-  // Si es modo desarrollo, usamos '' para que el Proxy de vite.config.ts haga su trabajo.
-  const API_URL = import.meta.env.DEV 
-    ? '' 
-    : (import.meta.env.VITE_API_BASE_URL || 'https://api-master.vintex.net.br');
+  // CORRECCIÓN DE CONEXIÓN
+  const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -39,18 +36,14 @@ export const Register: React.FC = () => {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Error al registrarse. Intenta nuevamente.');
+        throw new Error(result.error || 'Error al registrarse.');
       }
 
-      // Si el registro es exitoso:
-      // Opción A: Guardar sesión y entrar directo (si el backend devuelve sesión)
       if (result.session) {
           localStorage.setItem('vintex_session', JSON.stringify(result.session));
           localStorage.setItem('vintex_user', JSON.stringify(result.user));
-          // CAMBIO REALIZADO: Redirigir al onboarding para completar el perfil y pagar
           navigate('/onboarding');
       } else {
-          // Opción B: Redirigir al login si requiere confirmación de email
           navigate('/login');
       }
 
@@ -64,7 +57,7 @@ export const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen pt-20 flex items-center justify-center p-4 relative overflow-hidden bg-tech-black">
-      {/* Fondo decorativo */}
+      {/* ... (Resto del diseño igual) ... */}
       <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[120px] -z-10" />
       <div className="absolute bottom-1/4 left-1/4 w-[500px] h-[500px] bg-neon-main/5 rounded-full blur-[120px] -z-10" />
 
@@ -80,7 +73,6 @@ export const Register: React.FC = () => {
              <p className="text-gray-400 text-sm">Comienza tu prueba gratuita hoy</p>
           </div>
 
-          {/* Aquí se mantiene intacta la funcionalidad de registro con Google */}
           <SocialButtons />
 
           <div className="relative my-6 flex items-center justify-center">
