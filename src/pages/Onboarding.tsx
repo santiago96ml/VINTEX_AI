@@ -26,9 +26,7 @@ export const Onboarding: React.FC = () => {
   const [isBuilding, setIsBuilding] = useState(false);
 
   // ✅ URL ACTUALIZADA: Apunta a tu servidor Hostinger (Easypanel)
-  const API_URL = import.meta.env.DEV 
-    ? 'http://localhost:3000' 
-    : 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+ const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
   // Auto-scroll al último mensaje
   useEffect(() => {
