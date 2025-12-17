@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
@@ -10,11 +10,16 @@ export const SocialButtons = () => {
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
-      // Redirigimos al origen (la raíz de tu web) para que App.tsx decida el destino
+      
+      // 🟢 CORRECCIÓN: Forzamos que Google nos devuelva en la sala de la IA
+      // Si el usuario es nuevo -> Cae perfecto en Onboarding.
+      // Si es viejo -> El AuthGuard de App.tsx lo moverá al Dashboard después.
+      const redirectUrl = `${window.location.origin}/onboarding`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin, 
+          redirectTo: redirectUrl, 
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
