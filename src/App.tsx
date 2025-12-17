@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabaseClient';
-import { Loader2 } from 'lucide-react'; // Importamos el icono para el loader bonito
+import { Loader2 } from 'lucide-react'; 
 
 import { ParticleNetwork } from './components/canvas/ParticleNetwork';
 import { Navbar } from './components/layout/Navbar';
@@ -19,6 +19,8 @@ import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
 import { Onboarding } from './pages/Onboarding'; 
 
+const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+
 const ScrollToTop = () => {
   const { pathname } = useLocation();
   React.useEffect(() => {
@@ -27,72 +29,72 @@ const ScrollToTop = () => {
   return null;
 };
 
-// --- AUTH GUARD (Blindado) ---
+// --- AUTH GUARD (Sin Bucles Infinitos) ---
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Función única de verificación
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Rutas que cualquiera puede ver (sin login)
-      const publicRoutes = ['/', '/login', '/register', '/soluciones', '/tecnologia', '/casos-exito', '/demo'];
-      const isPublicRoute = publicRoutes.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        const publicRoutes = ['/', '/login', '/register', '/soluciones', '/tecnologia', '/casos-exito', '/demo'];
+        const isPublicRoute = publicRoutes.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
 
-      if (!session) {
-        // Si no hay sesión y trata de entrar a ruta privada, al login
-        if (!isPublicRoute) {
-           navigate('/login');
-        }
-      } else {
-        // --- SI HAY SESIÓN ---
-        // Consultamos si ya completó el onboarding
-        const { data: clinic } = await supabase
-          .from('web_clinica')
-          .select('id')
-          .eq('ID_USER', session.user.id)
-          .maybeSingle(); 
-
-        const isOnboardingPage = location.pathname === '/onboarding';
-        const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register';
-        const isHomePage = location.pathname === '/';
-
-        if (clinic) {
-          // CASO A: Usuario Viejo (Ya tiene clínica)
-          // Si intenta ir a Login, Registro, Home u Onboarding -> Lo mandamos al Dashboard
-          if (isOnboardingPage || isAuthEntryPage || isHomePage) {
-            navigate('/dashboard');
-          }
+        if (!session) {
+          if (!isPublicRoute) navigate('/login');
         } else {
-          // CASO B: Usuario Nuevo (No tiene clínica)
-          // Si intenta ir a Dashboard o HOME -> Lo mandamos al Onboarding
-          if (location.pathname.startsWith('/dashboard') || isHomePage) {
-            navigate('/onboarding');
+          // LLAMADA AL BACKEND (Una sola vez por cambio de ruta)
+          const response = await fetch(`${API_URL}/api/config/init-session`, {
+              headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const isOnboardingPage = location.pathname === '/onboarding';
+            const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register';
+            const isHomePage = location.pathname === '/';
+
+            if (data.hasClinic) {
+                // Si tiene clínica -> Dashboard
+                if (isOnboardingPage || isAuthEntryPage || isHomePage) {
+                    navigate('/dashboard', { replace: true });
+                }
+            } else {
+                // Si es nuevo -> Onboarding
+                if (location.pathname.startsWith('/dashboard') || isHomePage) {
+                    navigate('/onboarding', { replace: true });
+                }
+            }
           }
         }
+      } catch (error) {
+        console.error("Error AuthCheck:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
+    // Ejecutar verificación
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        // Re-verificamos cada vez que cambia la auth para evitar bugs
-        checkSession(); 
+    // Solo escuchamos SIGNED_OUT para sacar al usuario, evitamos el bucle de actualizaciones
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') navigate('/login');
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname]); // Se ejecuta solo cuando cambias de página
 
-  // --- LOADER BONITO (Restaurado) ---
   if (loading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
             <Loader2 className="w-12 h-12 text-neon-main animate-spin" />
-            <p className="text-gray-400 text-sm animate-pulse">Iniciando sistema...</p>
+            <p className="text-gray-400 text-sm animate-pulse">Conectando...</p>
         </div>
       </div>
     );

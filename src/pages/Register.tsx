@@ -10,9 +10,8 @@ export const Register: React.FC = () => {
   const [error, setError] = useState('');
   
   // ✅ URL ACTUALIZADA: Apunta a tu servidor Hostinger
-  const API_URL = import.meta.env.DEV 
-    ? 'http://localhost:3000' 
-    : 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+   const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host');
+
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
