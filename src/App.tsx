@@ -19,6 +19,7 @@ import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
 import { Onboarding } from './pages/Onboarding'; 
 
+// 👇 ESTO ES LO QUE FALTABA: La conexión con tu Backend
 const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
 const ScrollToTop = () => {
@@ -29,7 +30,7 @@ const ScrollToTop = () => {
   return null;
 };
 
-// --- AUTH GUARD (Sin Bucles Infinitos) ---
+// --- AUTH GUARD (Conectado al Backend) ---
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,8 +47,11 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
         if (!session) {
           if (!isPublicRoute) navigate('/login');
+          setLoading(false); // Importante: dejar de cargar si no hay sesión
         } else {
-          // LLAMADA AL BACKEND (Una sola vez por cambio de ruta)
+          // 👇 AQUÍ ESTÁ LA MAGIA: Llamamos al Backend para que repare el usuario si hace falta
+          console.log("📡 Conectando con Backend para verificar usuario...");
+          
           const response = await fetch(`${API_URL}/api/config/init-session`, {
               headers: { 'Authorization': `Bearer ${session.access_token}` }
           });
@@ -58,43 +62,43 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
             const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register';
             const isHomePage = location.pathname === '/';
 
+            // Redirección inteligente basada en la respuesta del server
             if (data.hasClinic) {
-                // Si tiene clínica -> Dashboard
                 if (isOnboardingPage || isAuthEntryPage || isHomePage) {
                     navigate('/dashboard', { replace: true });
                 }
             } else {
-                // Si es nuevo -> Onboarding
                 if (location.pathname.startsWith('/dashboard') || isHomePage) {
                     navigate('/onboarding', { replace: true });
                 }
             }
+          } else {
+             console.error("❌ Error del Backend:", response.status);
           }
+          setLoading(false);
         }
       } catch (error) {
         console.error("Error AuthCheck:", error);
-      } finally {
         setLoading(false);
       }
     };
 
-    // Ejecutar verificación
     checkSession();
 
-    // Solo escuchamos SIGNED_OUT para sacar al usuario, evitamos el bucle de actualizaciones
+    // Solo escuchamos el cierre de sesión para evitar bucles
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') navigate('/login');
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, location.pathname]); // Se ejecuta solo cuando cambias de página
+  }, [navigate, location.pathname]); 
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
             <Loader2 className="w-12 h-12 text-neon-main animate-spin" />
-            <p className="text-gray-400 text-sm animate-pulse">Conectando...</p>
+            <p className="text-gray-400 text-sm animate-pulse">Verificando cuenta...</p>
         </div>
       </div>
     );
