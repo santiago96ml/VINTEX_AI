@@ -20,171 +20,95 @@ export const Onboarding: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // --- ESTADOS ---
-  const [messages, setMessages] = useState<Message[]>([
-    { 
+  const [messages, setMessages] = useState<Message[]>([{ 
       role: 'assistant', 
-      content: "¡Hola! Soy Vintex Architect. Puedo diseñar tu sistema analizando tus datos. Cuéntame sobre tu negocio o sube archivos Excel/CSV para empezar." 
-    }
-  ]);
+      content: "¡Hola! Soy Vintex Architect. Puedo diseñar tu sistema analizando todas las hojas de tus archivos. Sube tus Excel o fotos para empezar." 
+  }]);
   const [input, setInput] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]); // MEJORA: Array de archivos
   const [loading, setLoading] = useState(false);
+  const [assistantMsg, setAssistantMsg] = useState(""); // Fix para ReferenceError
   const [isBuilding, setIsBuilding] = useState(false);
   const [readyToBuild, setReadyToBuild] = useState(false);
-  
-  // 1. Corregimos el error definiendo assistantMsg como estado
-  const [assistantMsg, setAssistantMsg] = useState("");
 
   const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
 
-  // Detector de finalización
-  useEffect(() => {
-    if (!isBuilding) return;
-    const checkStatus = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const channel = supabase
-        .channel('db-provisioning')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'web_clinica', filter: `ID_USER=eq.${session.user.id}` },
-          (payload) => {
-            if (payload.new.status === 'active') {
-              toast({ title: "¡Sistema Listo!", description: "Redirigiendo..." });
-              setTimeout(() => navigate('/dashboard'), 1000);
-            }
-          }
-        ).subscribe();
-      return () => { supabase.removeChannel(channel); };
-    };
-    checkStatus();
-  }, [isBuilding, navigate, toast]);
-
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, assistantMsg]); // Agregamos assistantMsg al scroll
+  }, [messages, assistantMsg]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      if (selectedFile.size > 15 * 1024 * 1024) {
-        toast({ variant: "destructive", title: "Archivo muy grande", description: "El máximo es 15MB." });
-        return;
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      const validFiles = selectedFiles.filter(f => f.size <= 15 * 1024 * 1024);
+      if (validFiles.length < selectedFiles.length) {
+        toast({ variant: "destructive", title: "Archivos omitidos", description: "El máximo es 15MB por archivo." });
       }
-      setFile(selectedFile);
+      setFiles(prev => [...prev, ...validFiles].slice(0, 5));
     }
   };
 
-  const clearFile = () => {
-    setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // --- ENVIAR MENSAJE CON STREAMING ---
   const handleSend = async () => {
-    if (!input.trim() && !file) return;
+    if (!input.trim() && files.length === 0) return;
 
-    const userMsg: Message = { role: 'user', content: input, attachmentName: file?.name };
-    setMessages(prev => [...prev, userMsg]);
+    const attachmentNames = files.map(f => f.name).join(', ');
+    setMessages(prev => [...prev, { role: 'user', content: input, attachmentName: attachmentNames }]);
     
     const currentInput = input;
-    const currentFile = file;
+    const currentFiles = [...files];
     setInput('');
-    clearFile();
+    setFiles([]);
     setLoading(true);
-    setAssistantMsg(""); // Limpiamos el acumulador de streaming
+    setAssistantMsg("");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Sesión expirada");
-
       const formData = new FormData();
       formData.append('message', currentInput);
-      if (currentFile) {
-        // Mantenemos 'files' en plural para el backend de nodos
-        formData.append('files', currentFile); 
-      }
+      currentFiles.forEach(f => formData.append('files', f)); // MEJORA: Múltiples archivos
 
       const response = await fetch(`${API_URL}/api/onboarding/interactive`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
         body: formData
       });
 
-      if (!response.ok) throw new Error("Fallo en la conexión con el Arquitecto");
-
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let accumulatedText = "";
+      let accumulated = "";
 
-      // Creamos la burbuja de la IA que se irá llenando
       setMessages(prev => [...prev, { role: 'assistant', content: "" }]);
 
       while (reader) {
         const { value, done } = await reader.read();
         if (done) break;
-
         const chunk = decoder.decode(value);
         const lines = chunk.split('\n');
-
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.replace('data: ', ''));
-              
               if (data.chunk) {
-                accumulatedText += data.chunk;
-                setAssistantMsg(accumulatedText); // Actualizamos estado para la condición de carga
-                
-                // Actualizamos el contenido de la última burbuja en el chat
+                accumulated += data.chunk;
+                setAssistantMsg(accumulated);
                 setMessages(prev => {
-                  const newMessages = [...prev];
-                  const lastIndex = newMessages.length - 1;
-                  if (newMessages[lastIndex].role === 'assistant') {
-                    newMessages[lastIndex].content = accumulatedText;
-                  }
-                  return newMessages;
+                  const newMsgs = [...prev];
+                  newMsgs[newMsgs.length - 1].content = accumulated;
+                  return newMsgs;
                 });
               }
-
-              if (data.final) {
-                if (data.is_ready) setReadyToBuild(true);
-              }
-            } catch (e) { /* Fragmento incompleto */ }
+              if (data.final) if (data.is_ready) setReadyToBuild(true);
+            } catch (e) {}
           }
         }
       }
-
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
-      setInput(currentInput);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFinish = async () => {
-    setIsBuilding(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const conversationSummary = messages
-        .map(m => `${m.role.toUpperCase()}: ${m.content} ${m.attachmentName ? `[Archivo: ${m.attachmentName}]` : ''}`)
-        .join('\n');
-
-      const response = await fetch(`${API_URL}/api/onboarding/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify({ conversationSummary })
-      });
-
-      if (!response.ok) throw new Error("Error iniciando construcción");
-      toast({ title: "Construyendo...", description: "Configurando base de datos..." });
-    } catch (error: any) {
-      setIsBuilding(false);
-      toast({ variant: "destructive", title: "Error", description: "Fallo al iniciar construcción" });
-    }
+    } finally { setLoading(false); }
   };
 
   const handleLogout = async () => {
@@ -192,22 +116,17 @@ export const Onboarding: React.FC = () => {
     navigate('/login');
   };
 
-  if (isBuilding) {
-    return (
-      <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center text-center p-4">
-        <Loader2 className="w-20 h-20 text-neon-main animate-spin" />
-        <h2 className="text-3xl font-bold text-white mt-8 mb-2">Construyendo tu Sistema</h2>
-        <p className="text-gray-400 max-w-md">Estamos creando las tablas y configurando permisos...</p>
-      </div>
-    );
-  }
+  if (isBuilding) return (
+    <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center text-center p-4">
+      <Loader2 className="w-20 h-20 text-neon-main animate-spin" />
+      <h2 className="text-3xl font-bold text-white mt-8 mb-2">Construyendo tu Sistema</h2>
+      <p className="text-gray-400">Estamos analizando todas las hojas de tus archivos...</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-tech-black flex flex-col items-center justify-center p-4 relative">
-      <button onClick={handleLogout} className="absolute top-6 right-6 text-gray-500 hover:text-white flex items-center gap-2 text-sm z-10">
-        <LogOut size={16} /> Cerrar Sesión
-      </button>
-
+      <button onClick={handleLogout} className="absolute top-6 right-6 text-gray-500 hover:text-white flex items-center gap-2 text-sm z-10"><LogOut size={16} /> Cerrar Sesión</button>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[85vh]">
         <div className="bg-[#111] p-4 border-b border-white/5 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -218,9 +137,7 @@ export const Onboarding: React.FC = () => {
             </div>
           </div>
           {readyToBuild && (
-            <motion.button initial={{ scale: 0.8 }} animate={{ scale: 1 }} onClick={handleFinish} className="bg-white hover:bg-gray-200 text-black text-xs font-bold py-2 px-4 rounded-full flex items-center gap-2">
-              <Sparkles size={14} className="text-purple-600" /> Construir Ahora
-            </motion.button>
+            <button onClick={() => navigate('/complete')} className="bg-white text-black text-xs font-bold py-2 px-4 rounded-full flex items-center gap-2"><Sparkles size={14} className="text-purple-600" /> Construir Ahora</button>
           )}
         </div>
 
@@ -231,52 +148,30 @@ export const Onboarding: React.FC = () => {
                 {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
               </div>
               <div className={`max-w-[80%] flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`p-4 rounded-2xl text-sm whitespace-pre-wrap ${msg.role === 'assistant' ? 'bg-[#1A1A1A] text-gray-200 border border-white/5' : 'bg-neon-main text-black font-medium'}`}>
-                  {msg.content}
-                </div>
-                {msg.attachmentName && (
-                    <div className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-white/10 text-xs text-gray-400">
-                        {msg.attachmentName.match(/\.(xlsx|csv)$/i) ? <FileSpreadsheet size={14} /> : <ImageIcon size={14} />}
-                        <span>{msg.attachmentName}</span>
-                    </div>
-                )}
+                <div className={`p-4 rounded-2xl text-sm whitespace-pre-wrap ${msg.role === 'assistant' ? 'bg-[#1A1A1A] text-gray-200 border border-white/5' : 'bg-neon-main text-black font-medium'}`}>{msg.content}</div>
+                {msg.attachmentName && <div className="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded">📎 {msg.attachmentName}</div>}
               </div>
             </div>
           ))}
-          
-          {/* USAMOS EL ESTADO PARA LA CONDICIÓN DE CARGA */}
-          {loading && assistantMsg === "" && (
-            <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-neon-main/20 text-neon-main flex items-center justify-center"><Bot size={16} /></div>
-              <div className="bg-[#1A1A1A] p-4 rounded-2xl border border-white/5 flex gap-1 items-center">
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="p-4 bg-[#111] border-t border-white/5">
-          <AnimatePresence>
-            {file && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="flex items-center gap-2 bg-[#222] text-gray-300 text-xs px-3 py-2 rounded-lg mb-3 w-fit border border-white/10">
-                    <span className="text-neon-main">{file.name.match(/\.(xlsx|csv|xls)$/i) ? <FileSpreadsheet size={16} /> : <ImageIcon size={16} />}</span>
-                    <span className="max-w-[200px] truncate">{file.name}</span>
-                    <button onClick={clearFile} className="hover:text-red-400 ml-2"><X size={14} /></button>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <AnimatePresence>
+              {files.map((f, i) => (
+                <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="flex items-center gap-2 bg-[#222] text-gray-300 text-[10px] px-2 py-1 rounded border border-white/10">
+                  {f.name.match(/\.(xlsx|csv)$/i) ? <FileSpreadsheet size={12} /> : <ImageIcon size={12} />}
+                  <span className="max-w-[100px] truncate">{f.name}</span>
+                  <button onClick={() => removeFile(i)} className="hover:text-red-400"><X size={10} /></button>
                 </motion.div>
-            )}
-          </AnimatePresence>
-
-          <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="relative flex items-center gap-2">
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
-                <Paperclip size={20} />
-            </button>
-            <input type="file" ref={fileInputRef} className="hidden" accept=".csv, .xlsx, .xls, image/*" onChange={handleFileSelect} />
-            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={file ? "Añade un comentario sobre el archivo..." : "Escribe tu respuesta..."} className="flex-1 bg-[#0A0A0A] border border-white/10 rounded-xl py-4 px-4 text-white focus:border-neon-main/50 outline-none" disabled={loading} />
-            <button type="submit" disabled={loading || (!input.trim() && !file)} className="p-4 bg-neon-main rounded-xl text-black hover:bg-neon-main/80 disabled:opacity-50 transition-colors">
-              <Send size={18} />
-            </button>
+              ))}
+            </AnimatePresence>
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-400 hover:text-white"><Paperclip size={20} /></button>
+            <input type="file" ref={fileInputRef} className="hidden" multiple accept=".csv, .xlsx, .xls, image/*" onChange={handleFileSelect} />
+            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Escribe tu respuesta..." className="flex-1 bg-black border border-white/10 rounded-xl px-4 text-white outline-none" disabled={loading} />
+            <button type="submit" disabled={loading || (input.trim() === "" && files.length === 0)} className="p-4 bg-neon-main rounded-xl text-black disabled:opacity-50"><Send size={18} /></button>
           </form>
         </div>
       </motion.div>
