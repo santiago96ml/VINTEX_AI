@@ -1,203 +1,170 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Users, Calendar, Package, LogOut, LayoutDashboard, 
-  Settings, Activity, CreditCard, Stethoscope
-} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  LayoutDashboard, Users, Calendar as CalendarIcon, Settings, 
+  Menu, LogOut, Bell, Package, Activity, ChevronRight 
+} from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { clearApiConfig } from '../../lib/api'; // Importante para logout
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-// Importamos tus vistas existentes (Asegúrate de que estos archivos existan en tu carpeta views)
-import { PatientsView } from './views/PatientsView';
+// Vistas
 import { MetricsView } from './views/MetricsView';
+import { PatientsView } from './views/PatientsView';
 import { DoctorsView } from './views/DoctorsView';
 import { AgendaView } from './views/AgendaView';
 
-// URL del Backend (Ajustada a tu servidor Hostinger)
-const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+interface UIConfig {
+  theme?: any;
+  modules?: string[];
+  tables?: Record<string, string>;
+}
 
 export const UserDashboard = () => {
-  const navigate = useNavigate();
   const [activeView, setActiveView] = useState('overview');
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [config, setConfig] = useState<UIConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para la configuración dinámica (lo que decide la IA)
-  const [config, setConfig] = useState<any>(null); 
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const navigate = useNavigate();
 
-  // 1. CARGAR CONFIGURACIÓN AL INICIAR
   useEffect(() => {
-    const loadConfig = async () => {
+    const loadData = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            navigate('/login');
-            return;
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { navigate('/login'); return; }
 
-        console.log("🔄 Cargando interfaz personalizada...");
+        // 1. Perfil
+        const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
+        setUserProfile(profile);
 
-        // Pedimos al backend la configuración de este usuario
-        const response = await fetch(`${API_URL}/api/config/init-session`, {
-          headers: { Authorization: `Bearer ${session.access_token}` }
-        });
-        
-        if (!response.ok) throw new Error("Error cargando configuración");
-        
-        const data = await response.json();
-        
-        // Si hay configuración de UI, la aplicamos
-        if (data.uiConfig) {
-          console.log("✨ Tema aplicado:", data.uiConfig.theme);
-          setConfig(data.uiConfig);
-          applyTheme(data.uiConfig.theme);
+        // 2. Configuración UI (Si es satélite, quizás no tenga esta tabla, usar default)
+        const { data: webConfig } = await supabase
+          .from('web_clinica')
+          .select('ui_config')
+          .eq('ID_USER', user.id)
+          .maybeSingle();
+
+        if (webConfig?.ui_config) {
+          setConfig(webConfig.ui_config);
         } else {
-          // Fallback: Configuración por defecto si la IA falló o es una cuenta vieja
-          console.warn("⚠️ No hay uiConfig, usando por defecto.");
-          setConfig({
-            features: { patients: true, calendar: true, billing: true }, // Todo activo por defecto
-            texts: { dashboardTitle: "Mi Clínica", welcomeMessage: "Bienvenido al sistema" }
-          });
+          // Fallback para satélites puros que no usaron el constructor IA
+          setConfig({ tables: { patients: 'pacientes', doctors: 'doctores' } }); 
         }
       } catch (e) {
-        console.error("Error Dashboard:", e);
+        console.error("Error loading dashboard", e);
       } finally {
         setLoading(false);
       }
     };
-    loadConfig();
+    loadData();
   }, [navigate]);
 
-  // 2. FUNCIÓN PARA "PINTAR" LA WEB (CSS Variables)
-  const applyTheme = (theme: any) => {
-    if (!theme) return;
-    const root = document.documentElement;
-    // Cambiamos los colores globales de Tailwind dinámicamente
-    // Si la IA manda un color, lo usamos; si no, dejamos el neon original
-    if (theme.primaryColor) root.style.setProperty('--color-neon-main', theme.primaryColor);
-    if (theme.secondaryColor) root.style.setProperty('--color-secondary', theme.secondaryColor);
-  };
-
-  const handleLogout = async () => {
+  const handleSignOut = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem('vintex_session');
-    localStorage.removeItem('vintex_user');
+    clearApiConfig(); // Limpiamos la URL del satélite al salir
     navigate('/login');
   };
 
-  // 3. DEFINIR EL MENÚ DINÁMICO
-  const getMenuItems = () => {
-    if (!config) return []; 
+  // Resuelve el nombre de la tabla (Soporta SaaS 'app_xxx' y Satélite 'xxx')
+  const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
 
-    const items = [
-      { id: 'overview', icon: LayoutDashboard, label: 'Panel Principal', show: true },
-      
-      // Módulos condicionales (Solo se muestran si features.[modulo] es true)
-      { id: 'patients', icon: Users, label: 'Pacientes', show: config.features?.patients },
-      { id: 'agenda', icon: Calendar, label: 'Agenda', show: config.features?.calendar },
-      { id: 'doctors', icon: Stethoscope, label: 'Doctores', show: config.features?.patients }, // Solemos ligar doctores a pacientes
-      { id: 'inventory', icon: Package, label: 'Inventario', show: config.features?.inventory },
-      { id: 'billing', icon: CreditCard, label: 'Facturación', show: config.features?.billing },
-    ];
-
-    return items.filter(item => item.show);
-  };
-
-  // 4. RENDERIZADOR DE VISTAS
   const renderContent = () => {
+    if (loading) return <div className="text-center p-10 text-gray-500">Cargando módulos...</div>;
+
     switch (activeView) {
       case 'overview': return <MetricsView />;
-      case 'patients': return <PatientsView />;
-      case 'doctors': return <DoctorsView />;
-      case 'agenda': return <AgendaView />;
+      case 'patients': return <PatientsView tableName={getTableName('patients')} />;
+      case 'doctors': return <DoctorsView tableName={getTableName('doctors')} />;
+      case 'agenda': return <AgendaView tableName={getTableName('appointments')} />;
       case 'inventory': return (
-        <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <Package size={48} className="mb-4 opacity-50" />
-            <h3 className="text-xl font-bold">Módulo de Inventario</h3>
-            <p>Este módulo está activo en tu base de datos.</p>
+        <div className="flex flex-col items-center justify-center h-96 text-gray-500">
+          <Package size={48} className="mb-4 opacity-50"/>
+          <p>Módulo de Inventario (Tabla: {getTableName('inventory')})</p>
         </div>
       );
       default: return <MetricsView />;
     }
   };
 
-  if (loading) {
-      return (
-        <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-            <div className="flex flex-col items-center gap-4">
-                <div className="w-12 h-12 border-4 border-neon-main border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-gray-400 text-sm animate-pulse">Cargando tu interfaz...</p>
-            </div>
-        </div>
-      );
-  }
+  const menuItems = [
+    { id: 'overview', label: 'Panel', icon: LayoutDashboard },
+    { id: 'patients', label: 'Pacientes', icon: Users },
+    { id: 'doctors', label: 'Doctores', icon: Activity },
+    { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
+    { id: 'inventory', label: 'Inventario', icon: Package },
+  ];
 
   return (
-    <div className="flex h-screen bg-[#050505] overflow-hidden font-sans">
-      {/* Sidebar Dinámico */}
-      <motion.div 
-        initial={{ x: -20, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        className="w-64 border-r border-white/10 bg-[#0A0A0A] flex flex-col"
-      >
-        <div className="p-6">
-          {/* Título personalizado por la IA (o default) */}
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-neon-main to-purple-500 truncate">
-            {config?.texts?.dashboardTitle || "Vintex Panel"}
-          </h1>
+    <div className="flex h-screen bg-[#050505] text-gray-100 font-sans overflow-hidden">
+      {/* Sidebar Desktop */}
+      <aside className="hidden md:flex flex-col w-64 border-r border-white/10 bg-black/50 backdrop-blur-xl">
+        <div className="p-6 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neon-main to-emerald-600" />
+          <span className="font-bold text-lg">Vintex OS</span>
         </div>
-
-        <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
-          {getMenuItems().map((item) => (
+        <nav className="flex-1 px-4 py-6 space-y-1">
+          {menuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveView(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
-                activeView === item.id 
-                  ? 'bg-neon-main/10 text-neon-main border border-neon-main/20 shadow-[0_0_20px_-5px_var(--color-neon-main)]' 
-                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
+                ${activeView === item.id ? 'bg-neon-main/10 text-neon-main' : 'text-gray-400 hover:text-white'}`}
             >
               <item.icon size={20} />
               <span className="font-medium">{item.label}</span>
+              {activeView === item.id && <ChevronRight size={16} className="ml-auto opacity-50" />}
             </button>
           ))}
         </nav>
+      </aside>
 
-        <div className="p-4 border-t border-white/5">
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors"
-          >
-            <LogOut size={20} />
-            <span>Cerrar Sesión</span>
-          </button>
-        </div>
-      </motion.div>
-
-      {/* Área Principal */}
-      <main className="flex-1 overflow-auto bg-[#050505] relative">
-        {/* Header con Bienvenida IA */}
-        <header className="sticky top-0 z-20 bg-[#050505]/80 backdrop-blur-md border-b border-white/5 px-8 py-6 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-white">
-              {config?.texts?.welcomeMessage || "Bienvenido de nuevo"}
-            </h2>
-            <p className="text-sm text-gray-500">
-              {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
-          </div>
-          
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#050505] relative">
+        <header className="h-16 border-b border-white/10 flex items-center justify-between px-4 md:px-8 bg-black/50 backdrop-blur-md">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-neon-main to-purple-600 p-[2px]">
-              <div className="w-full h-full rounded-full bg-black flex items-center justify-center text-white font-bold">
-                U
-              </div>
-            </div>
+            <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden text-gray-400"><Menu /></Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="bg-[#0a0a0a] border-r-white/10 text-white w-64">
+                <div className="p-6 font-bold text-xl text-neon-main">Vintex OS</div>
+                <nav className="px-4 space-y-1">
+                  {menuItems.map((item) => (
+                    <button key={item.id} onClick={() => { setActiveView(item.id); setIsMobileOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-gray-400">
+                      <item.icon size={20} /> <span>{item.label}</span>
+                    </button>
+                  ))}
+                </nav>
+              </SheetContent>
+            </Sheet>
+            <h1 className="text-xl font-semibold">{menuItems.find(i => i.id === activeView)?.label}</h1>
           </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Avatar><AvatarFallback className="bg-neon-main text-black font-bold">U</AvatarFallback></Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 bg-[#0a0a0a] border-white/10 text-gray-200" align="end">
+              <DropdownMenuLabel>{userProfile?.email}</DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem onClick={handleSignOut} className="text-rose-400 cursor-pointer">
+                <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
-        <div className="p-8 max-w-7xl mx-auto">
-          {renderContent()}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-7xl mx-auto">{renderContent()}</div>
         </div>
       </main>
     </div>

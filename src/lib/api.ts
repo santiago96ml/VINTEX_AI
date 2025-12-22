@@ -1,62 +1,50 @@
 import axios from 'axios';
+import { supabase } from './supabaseClient';
 
-// Detecta automáticamente la URL dependiendo si estás en local o producción
-// Si VITE_API_BASE_URL no está definida, usa el fallback seguro.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api-clinica.vintex.net.br';
+// Clave para persistir la URL del backend asignado
+const API_URL_KEY = 'vintex_active_backend_url';
 
-const api = axios.create({
-  baseURL: BASE_URL,
+// 1. Obtener la URL actual (o la default del .env)
+export const getApiUrl = () => {
+  const storedUrl = localStorage.getItem(API_URL_KEY);
+  return storedUrl || import.meta.env.VITE_API_URL || 'https://api-clinica.vintex.net.br';
+};
+
+// 2. Función para "Enchufar" el frontend a otro backend (Satélite)
+export const setApiUrl = (url: string) => {
+  if (url) {
+    localStorage.setItem(API_URL_KEY, url);
+    // Forzamos recarga de la instancia de axios
+    api.defaults.baseURL = url;
+  }
+};
+
+// 3. Instancia de Axios Configurada
+export const api = axios.create({
+  baseURL: getApiUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// --- INTERCEPTOR DE REQUEST (Seguridad de salida) ---
-api.interceptors.request.use(
-  (config) => {
-    // Intentamos obtener el token de varias fuentes posibles
-    let token = localStorage.getItem('access_token');
-    
-    // Si usas Supabase auth, a veces el token está dentro del objeto de sesión
-    if (!token) {
-        const sessionStr = localStorage.getItem('vintex_session');
-        if (sessionStr) {
-            try {
-                const session = JSON.parse(sessionStr);
-                token = session.access_token;
-            } catch (e) {
-                console.error("Error parseando sesión", e);
-            }
-        }
-    }
+// 4. Interceptor: Inyectar Token y URL actualizada en cada petición
+api.interceptors.request.use(async (config) => {
+  // Asegurarnos de que usa la URL más reciente
+  config.baseURL = getApiUrl();
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// --- INTERCEPTOR DE RESPONSE (Seguridad de entrada) ---
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Si el backend dice "No autorizado" (401), cerramos la sesión automáticamente
-    if (error.response?.status === 401) {
-      console.warn('Sesión expirada o inválida. Redirigiendo al login...');
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('vintex_session');
-      localStorage.removeItem('vintex_user');
-      
-      // Redirigir al login solo si no estamos ya allí
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
+  // Obtener sesión de Supabase
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
   }
-);
 
-export default api;
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
+// Helper para limpiar la configuración al cerrar sesión
+export const clearApiConfig = () => {
+  localStorage.removeItem(API_URL_KEY);
+};

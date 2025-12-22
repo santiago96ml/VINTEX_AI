@@ -1,100 +1,159 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Lock, Mail, Loader2, AlertTriangle } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { SocialButtons } from '../features/auth/SocialButtons';
+import { supabase } from '../lib/supabaseClient';
+import { setApiUrl } from '../lib/api'; // Importamos la nueva función
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, ArrowRight } from 'lucide-react';
+import { Navbar } from '../components/layout/Navbar';
+import { GlassCard } from '../components/ui/GlassCard';
 
-export const Login: React.FC = () => {
-  const navigate = useNavigate();
+export const Login = () => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  // Usar variable de entorno con fallback (detecta si es dev o prod)
-  const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      email: formData.get('email'),
-      password: formData.get('password')
-    };
 
     try {
-      // Petición al Master
-      const response = await fetch(`${API_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+      // 1. Autenticación con Supabase (Capa Auth Global)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const result = await response.json();
+      if (error) throw error;
+      if (!data.session) throw new Error('No session created');
 
-      if (!response.ok) throw new Error(result.error || 'Credenciales inválidas');
+      // 2. CONSULTAR AL MOTOR MAESTRO: "¿Quién es este usuario?"
+      // Usamos la URL original del .env para esta pregunta inicial
+      const masterUrl = import.meta.env.VITE_API_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host/';
+      
+      const initResponse = await fetch(`${masterUrl}/api/config/init-session`, {
+        headers: {
+          'Authorization': `Bearer ${data.session.access_token}`
+        }
+      });
 
-      // Guardar sesión y redirigir
-      localStorage.setItem('vintex_session', JSON.stringify(result.session));
-      localStorage.setItem('vintex_user', JSON.stringify(result.user));
-      navigate('/dashboard'); // Redirigir al dashboard
+      if (!initResponse.ok) throw new Error('Error inicializando sesión en el motor.');
 
-    } catch (err: any) {
-      setError(err.message);
+      const config = await initResponse.json();
+
+      // 3. LÓGICA DE REDIRECCIÓN O CAMBIO DE ENCHUFE
+      
+      // CASO A: Redirección a Frontend Dedicado (URL externa)
+      if (config.redirect && config.url) {
+        toast({ title: "Redirigiendo...", description: "Accediendo a tu entorno dedicado." });
+        window.location.href = config.url;
+        return;
+      }
+
+      // CASO B: Backend Satélite (Mismo Frontend, distinta API)
+      if (config.backendUrl) {
+        console.log("🔌 Conectando a infraestructura:", config.backendUrl);
+        setApiUrl(config.backendUrl); // Guardamos la nueva URL
+      }
+
+      // 4. NAVEGACIÓN
+      if (config.hasClinic) {
+        navigate('/dashboard');
+      } else {
+        navigate('/onboarding');
+      }
+
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Error de acceso",
+        description: error.message || "Credenciales incorrectas.",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen pt-20 flex items-center justify-center p-4 relative overflow-hidden bg-tech-black">
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-neon-main/5 rounded-full blur-[120px] -z-10" />
+    <div className="min-h-screen bg-[#050505] text-white selection:bg-neon-main/30">
+      <Navbar />
+      
+      <div className="container mx-auto px-4 pt-32 pb-20 flex flex-col items-center justify-center min-h-[80vh]">
+        
+        {/* Decorative Background */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-neon-main/10 rounded-full blur-[100px] -z-10" />
 
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-[450px]">
-        <div className="relative bg-[#0A0A0A] border border-white/10 rounded-[32px] p-8 shadow-2xl">
-          
-          <div className="text-center mb-8">
-             <div className="w-10 h-10 bg-neon-main rounded-lg mx-auto flex items-center justify-center font-bold text-black text-xl mb-4 shadow-[0_0_15px_rgba(0,255,153,0.4)]">V</div>
-             <h2 className="text-2xl font-bold text-white mb-1">Bienvenido de nuevo</h2>
-             <p className="text-gray-400 text-sm">Ingresa a tu panel de control</p>
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">Bienvenido de nuevo</h1>
+            <p className="text-gray-400">Accede a tu ecosistema digital</p>
           </div>
 
-          <SocialButtons />
-
-          <div className="relative my-6 flex items-center justify-center">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
-            <span className="relative bg-[#0A0A0A] px-3 text-[10px] uppercase tracking-widest text-gray-500 font-mono">O con email</span>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 flex items-center gap-3 text-red-400 text-xs mb-4">
-                <AlertTriangle size={16} /> {error}
+          <GlassCard className="p-8 border-white/10 backdrop-blur-xl">
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Corporativo</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="nombre@empresa.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-black/40 border-white/10 text-white placeholder:text-gray-600 focus:border-neon-main/50 focus:ring-neon-main/20"
+                  required
+                />
               </div>
-            )}
 
-            <div className="relative group">
-                <Mail className="absolute left-5 top-4 text-gray-500 group-focus-within:text-white transition-colors" size={20} />
-                <input name="email" type="email" required className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm" placeholder="Correo electrónico" />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Contraseña</Label>
+                  <Link to="#" className="text-xs text-neon-main hover:text-neon-main/80">
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-black/40 border-white/10 text-white focus:border-neon-main/50 focus:ring-neon-main/20"
+                  required
+                />
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full bg-neon-main text-black hover:bg-emerald-400 font-medium h-11"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Autenticando...
+                  </>
+                ) : (
+                  <>
+                    Iniciar Sesión
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center text-sm text-gray-500">
+              ¿Aún no tienes cuenta?{' '}
+              <Link to="/register" className="text-neon-main hover:underline">
+                Crear cuenta
+              </Link>
             </div>
-            
-            <div className="relative group">
-                <Lock className="absolute left-5 top-4 text-gray-500 group-focus-within:text-white transition-colors" size={20} />
-                <input name="password" type="password" required className="w-full bg-[#1A1A1A] border border-white/10 rounded-full py-4 pl-14 pr-6 text-white outline-none focus:border-neon-main/50 transition-all placeholder-gray-600 text-sm" placeholder="Contraseña" />
-            </div>
-
-            <button disabled={loading} className="w-full bg-neon-main hover:bg-neon-dark text-black font-bold py-4 rounded-full transition-all flex items-center justify-center gap-2 mt-2 text-[15px]">
-              {loading ? <Loader2 className="animate-spin" /> : "Iniciar Sesión"}
-            </button>
-          </form>
-
-          <div className="text-center mt-8 text-sm">
-            <span className="text-gray-500">¿No tienes cuenta? </span>
-            <Link to="/register" className="text-neon-main font-medium hover:underline">Regístrate</Link>
-          </div>
+          </GlassCard>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
