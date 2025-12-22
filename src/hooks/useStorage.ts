@@ -2,7 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 
 // Asegúrate de que esta URL apunte a tu backend satélite
-const API_URL = import.meta.env.VITE_API_URL || 'https://api-clinica.vintex.net.br';
+const API_URL = import.meta.env.VITE_API_URL || 'https://webs-de-vintex-bakend-de-clinica.1kh9sk.easypanel.host/';
 
 export const useStorage = () => {
   const [uploading, setUploading] = useState(false);
