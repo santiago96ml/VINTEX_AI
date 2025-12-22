@@ -1,129 +1,85 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Users, Calendar as CalendarIcon, 
-  Menu, LogOut, Package, Activity, ChevronRight 
+  LayoutDashboard, Users, Calendar as CalendarIcon, Settings, 
+  Menu, LogOut, Bell, Package, Activity, ChevronRight, X 
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
-import { clearApiConfig } from '../../lib/api';
+import { clearApiConfig } from '../../lib/api'; 
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-// Vistas (Asegúrate de que estos archivos existan en tu proyecto)
+// Vistas
 import { MetricsView } from './views/MetricsView';
 import { PatientsView } from './views/PatientsView';
 import { DoctorsView } from './views/DoctorsView';
 import { AgendaView } from './views/AgendaView';
 
-// Tipado para la configuración y el perfil
 interface UIConfig {
   theme?: any;
   modules?: string[];
   tables?: Record<string, string>;
 }
 
-interface UserProfile {
-  id: string;
-  email?: string;
-  full_name?: string;
-  [key: string]: any;
-}
-
 export const UserDashboard = () => {
   const [activeView, setActiveView] = useState('overview');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false); // Menú nativo
   const [config, setConfig] = useState<UIConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const navigate = useNavigate();
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar menú al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
-    let isMounted = true; // Para evitar actualizaciones de estado si el componente se desmonta
-
     const loadData = async () => {
       try {
-        // 1. Verificar sesión activa
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError || !user) { 
-          if (isMounted) navigate('/login'); 
-          return; 
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { navigate('/login'); return; }
 
-        // 2. Cargar Perfil de Usuario
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+        const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
+        setUserProfile(profile);
 
-        if (isMounted) setUserProfile(profile || { id: user.id, email: user.email });
-
-        // 3. Cargar Configuración UI
-        // Nota: Asegúrate que la columna en DB sea 'ID_USER' o 'user_id' según tu esquema real.
         const { data: webConfig } = await supabase
           .from('web_clinica')
           .select('ui_config')
-          .eq('ID_USER', user.id) // Revisa si en tu base de datos es mayúscula o minúscula
+          .eq('ID_USER', user.id)
           .maybeSingle();
 
-        if (isMounted) {
-          if (webConfig?.ui_config) {
-            setConfig(webConfig.ui_config);
-          } else {
-            // Fallback por defecto
-            setConfig({ tables: { patients: 'pacientes', doctors: 'doctores', appointments: 'citas' } }); 
-          }
+        if (webConfig?.ui_config) {
+          setConfig(webConfig.ui_config);
+        } else {
+          setConfig({ tables: { patients: 'pacientes', doctors: 'doctores' } }); 
         }
-
       } catch (e) {
-        console.error("Error loading dashboard critical data:", e);
+        console.error("Error loading dashboard", e);
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
     };
-
     loadData();
-
-    return () => {
-      isMounted = false; // Cleanup
-    };
   }, [navigate]);
 
   const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error("Error al cerrar sesión:", error);
-    } finally {
-      clearApiConfig(); // Limpia localStorage del satélite
-      navigate('/login');
-    }
+    await supabase.auth.signOut();
+    clearApiConfig();
+    navigate('/login');
   };
 
-  // Función robusta para obtener nombres de tablas
-  const getTableName = (key: string): string => {
-    if (config?.tables?.[key]) {
-      return config.tables[key];
-    }
-    // Fallback: Si no hay config, asume prefijo 'app_' (SaaS standard)
-    return `app_${key}`;
-  };
+  const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
 
   const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[50vh] text-gray-500 animate-pulse">
-          <div className="w-8 h-8 border-4 border-neon-main border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p>Cargando entorno...</p>
-        </div>
-      );
-    }
+    if (loading) return <div className="flex items-center justify-center h-full text-neon-main animate-pulse">Cargando sistema...</div>;
 
     switch (activeView) {
       case 'overview': return <MetricsView />;
@@ -131,10 +87,9 @@ export const UserDashboard = () => {
       case 'doctors': return <DoctorsView tableName={getTableName('doctors')} />;
       case 'agenda': return <AgendaView tableName={getTableName('appointments')} />;
       case 'inventory': return (
-        <div className="flex flex-col items-center justify-center h-96 text-gray-500 border border-dashed border-white/10 rounded-xl bg-white/5">
-          <Package size={48} className="mb-4 opacity-50 text-neon-main"/>
-          <p className="text-lg font-medium">Módulo de Inventario</p>
-          <p className="text-sm opacity-70">Conectado a tabla: <code className="bg-black/30 px-2 py-1 rounded text-neon-main">{getTableName('inventory')}</code></p>
+        <div className="flex flex-col items-center justify-center h-96 text-gray-500">
+          <Package size={48} className="mb-4 opacity-50"/>
+          <p>Módulo de Inventario (Tabla: {getTableName('inventory')})</p>
         </div>
       );
       default: return <MetricsView />;
@@ -152,122 +107,106 @@ export const UserDashboard = () => {
   return (
     <div className="flex h-screen bg-[#050505] text-gray-100 font-sans overflow-hidden">
       
-      {/* Sidebar Desktop */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-white/10 bg-black/40 backdrop-blur-xl">
+      {/* SIDEBAR DESKTOP */}
+      <aside className="hidden md:flex flex-col w-64 border-r border-white/10 bg-black/50 backdrop-blur-xl">
         <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neon-main to-emerald-600 shadow-[0_0_15px_rgba(16,185,129,0.4)]" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neon-main to-emerald-600 shadow-[0_0_15px_rgba(0,229,153,0.3)]" />
           <span className="font-bold text-lg tracking-tight">Vintex OS</span>
         </div>
-        
         <nav className="flex-1 px-4 py-6 space-y-1">
-          {menuItems.map((item) => {
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveView(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative
-                  ${isActive 
-                    ? 'bg-neon-main/10 text-neon-main font-semibold shadow-inner' 
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-              >
-                <item.icon size={20} className={isActive ? "text-neon-main" : "text-gray-500 group-hover:text-white"} />
-                <span>{item.label}</span>
-                {isActive && (
-                  <ChevronRight size={16} className="ml-auto opacity-70 animate-in slide-in-from-left-2" />
-                )}
-              </button>
-            );
-          })}
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveView(item.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
+                ${activeView === item.id 
+                  ? 'bg-neon-main/10 text-neon-main shadow-[0_0_20px_rgba(0,229,153,0.1)]' 
+                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                }`}
+            >
+              <item.icon size={20} className={activeView === item.id ? 'animate-pulse' : ''} />
+              <span className="font-medium">{item.label}</span>
+              {activeView === item.id && <ChevronRight size={16} className="ml-auto opacity-50" />}
+            </button>
+          ))}
         </nav>
-
-        {/* User Footer in Sidebar */}
-        <div className="p-4 border-t border-white/10">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <Avatar className="h-8 w-8 border border-white/10">
-              <AvatarFallback className="bg-zinc-800 text-xs text-white">
-                {userProfile?.email?.substring(0, 2).toUpperCase() || 'U'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userProfile?.full_name || 'Usuario'}</p>
-              <p className="text-xs text-gray-500 truncate">{userProfile?.email}</p>
-            </div>
-          </div>
-        </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-[#050505] relative bg-[url('/grid-pattern.svg')] bg-repeat opacity-100">
-        
-        {/* Header Mobile & Desktop */}
-        <header className="h-16 border-b border-white/10 flex items-center justify-between px-4 md:px-8 bg-black/60 backdrop-blur-md sticky top-0 z-20">
+      {/* MOBILE MENU OVERLAY */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm md:hidden">
+          <div className="absolute left-0 top-0 h-full w-64 bg-[#0a0a0a] border-r border-white/10 p-4">
+            <div className="flex justify-between items-center mb-8">
+              <span className="font-bold text-lg text-neon-main">Vintex OS</span>
+              <button onClick={() => setIsMobileOpen(false)}><X className="text-gray-400" /></button>
+            </div>
+            <nav className="space-y-2">
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { setActiveView(item.id); setIsMobileOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${activeView === item.id ? 'bg-neon-main/20 text-neon-main' : 'text-gray-400'}`}
+                >
+                  <item.icon size={20} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#050505] relative">
+        <header className="h-16 border-b border-white/10 flex items-center justify-between px-4 md:px-8 bg-black/50 backdrop-blur-md sticky top-0 z-20">
           <div className="flex items-center gap-4">
-            <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden text-gray-400 hover:text-white hover:bg-white/10">
-                  <Menu size={24} />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="bg-[#0a0a0a] border-r-white/10 text-white w-72 p-0">
-                <div className="p-6 font-bold text-xl text-neon-main border-b border-white/10">Vintex OS Mobile</div>
-                <nav className="p-4 space-y-2">
-                  {menuItems.map((item) => (
-                    <button 
-                      key={item.id} 
-                      onClick={() => { setActiveView(item.id); setIsMobileOpen(false); }} 
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                        ${activeView === item.id ? 'bg-white/10 text-white' : 'text-gray-400'}`}
-                    >
-                      <item.icon size={20} /> 
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </nav>
-              </SheetContent>
-            </Sheet>
-            
-            <h1 className="text-xl font-semibold tracking-tight text-white/90">
+            <button onClick={() => setIsMobileOpen(true)} className="md:hidden text-gray-400">
+              <Menu size={24} />
+            </button>
+            <h1 className="text-xl font-semibold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
               {menuItems.find(i => i.id === activeView)?.label}
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
-             {/* Dropdown Usuario */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full ring-2 ring-transparent hover:ring-white/20 transition-all p-0 overflow-hidden">
-                  <Avatar className="h-full w-full">
-                    <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-xs">
-                       {userProfile?.email?.charAt(0).toUpperCase() || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-[#0a0a0a] border border-white/10 text-gray-200 shadow-2xl" align="end">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-white">{userProfile?.full_name || 'Mi Cuenta'}</p>
-                    <p className="text-xs leading-none text-gray-500">{userProfile?.email}</p>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Bell size={20} className="text-gray-400 hover:text-white cursor-pointer" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full" />
+            </div>
+            
+            {/* USER MENU NATIVO (Sin Shadcn Dropdown) */}
+            <div className="relative" ref={userMenuRef}>
+              <button 
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="h-9 w-9 rounded-full bg-neon-main text-black font-bold flex items-center justify-center ring-2 ring-white/10 hover:ring-white/30 transition-all"
+              >
+                {userProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+              </button>
+
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-4 py-2 border-b border-white/10">
+                    <p className="text-sm font-medium text-white">{userProfile?.full_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{userProfile?.email}</p>
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem onClick={handleSignOut} className="text-rose-400 focus:text-rose-300 focus:bg-rose-900/20 cursor-pointer">
-                  <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <button 
+                    onClick={handleSignOut}
+                    className="w-full text-left px-4 py-2 text-sm text-rose-400 hover:bg-white/5 flex items-center gap-2"
+                  >
+                    <LogOut size={14} /> Cerrar Sesión
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-          <div className="max-w-7xl mx-auto animate-in fade-in duration-500">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
+          <div className="max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-300">
             {renderContent()}
           </div>
         </div>
       </main>
     </div>
   );
-};S
+};-
