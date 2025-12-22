@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Users, DollarSign, TrendingUp } from 'lucide-react';
+// Asegúrate de que esta ruta sea correcta según tu estructura
 import { supabase } from '../../../lib/supabaseClient';
 
 export const MetricsView = () => {
-  // 1. Inicializamos con arrays vacíos, NO null ni undefined
+  // 1. Estado inicial seguro
   const [metrics, setMetrics] = useState({
     totalPatients: 0,
     activeDoctors: 0,
@@ -15,13 +16,12 @@ export const MetricsView = () => {
   useEffect(() => {
     const loadMetrics = async () => {
       try {
-        // En un escenario real, estas consultas dependerían de las tablas dinámicas
-        // Por ahora usamos contadores seguros o mocks si la tabla no existe
+        // Aquí irían tus consultas reales a Supabase
+        // const { count } = await supabase.from('...').select('*', { count: 'exact' });
         
-        // Ejemplo seguro:
-        // const { count: patients } = await supabase.from('app_pacientes').select('*', { count: 'exact', head: true });
-        
-        // Simulamos carga para evitar el error de undefined
+        // Simulamos retardo de red para ver el estado de carga
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         setMetrics({
           totalPatients: 1240,
           activeDoctors: 8,
@@ -39,8 +39,18 @@ export const MetricsView = () => {
   }, []);
 
   if (loading) {
-    return <div className="text-gray-500 animate-pulse">Cargando métricas...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500 animate-pulse flex items-center gap-2">
+          <Activity className="animate-spin" size={20} />
+          Cargando métricas...
+        </div>
+      </div>
+    );
   }
+
+  // 2. Validación defensiva antes de renderizar
+  if (!metrics) return null;
 
   const cards = [
     { label: 'Pacientes Totales', value: metrics.totalPatients, icon: Users, color: 'text-blue-400' },
@@ -48,6 +58,9 @@ export const MetricsView = () => {
     { label: 'Citas Hoy', value: metrics.appointmentsToday, icon: TrendingUp, color: 'text-rose-400' },
     { label: 'Ingresos Mes', value: `$${metrics.monthlyRevenue}`, icon: DollarSign, color: 'text-yellow-400' },
   ];
+
+  // Array estático para evitar errores de generación dinámica
+  const bars = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
   return (
     <div className="space-y-6">
@@ -71,13 +84,13 @@ export const MetricsView = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-neon-main/5 to-transparent opacity-50" />
         <p className="text-gray-500 z-10">Gráfico de Actividad (Próximamente)</p>
         
-        {/* Barras decorativas animadas */}
+        {/* Barras decorativas (Versión segura) */}
         <div className="flex items-end gap-2 h-32 absolute bottom-10 left-10 right-10 justify-between opacity-30">
-           {[...Array(12)].map((_, i) => (
+           {bars.map((i) => (
               <div 
                 key={i} 
                 className="w-full bg-neon-main rounded-t-sm" 
-                style={{ height: `${Math.random() * 100}%` }} 
+                style={{ height: `${Math.random() * 80 + 20}%` }} 
               />
            ))}
         </div>
