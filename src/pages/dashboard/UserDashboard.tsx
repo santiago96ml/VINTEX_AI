@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Calendar as CalendarIcon, 
-  Menu, LogOut, Bell, Package, Activity, ChevronRight, X,
+  Menu, LogOut, Bell, Package, Activity, X,
   Settings // <--- Faltaba importar esto
 } from 'lucide-react';
 import { motion } from 'framer-motion'; // <--- Faltaba importar esto

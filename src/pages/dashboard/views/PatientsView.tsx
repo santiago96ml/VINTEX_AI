@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, MessageSquare, FileText, Edit, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Plus, MessageSquare, FileText, Edit, User } from 'lucide-react';
 import { api } from '../../../../src/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { FilesModal } from '../modals/FilesModal';
 
 export const PatientsView = () => {
   const [patients, setPatients] = useState<SatelliteClient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Estados para Modales

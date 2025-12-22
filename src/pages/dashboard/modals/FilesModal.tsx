@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, FileText, Trash2, Download } from 'lucide-react';
+import { X, Upload, FileText, Download } from 'lucide-react';
 import { api } from '../../../../src/lib/api';
 import { Button } from '@/components/ui/button';
 import { ClientFile } from '@/types/satellite';

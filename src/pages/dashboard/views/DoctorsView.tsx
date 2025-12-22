@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, Plus, Edit, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Activity, Plus, Edit} from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { SatelliteDoctor } from '@/types/satellite';

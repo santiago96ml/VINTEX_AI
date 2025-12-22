@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Activity, Users, DollarSign, TrendingUp } from 'lucide-react';
 // Asegúrate de que esta ruta sea correcta según tu estructura
-import { supabase } from '../../../lib/supabaseClient';
 
 export const MetricsView = () => {
   // 1. Estado inicial seguro
