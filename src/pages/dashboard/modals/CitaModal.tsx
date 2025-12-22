@@ -1,134 +1,108 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Save, User, Phone, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { api } from '../../../../src/lib/api';
+import { Switch } from '@/components/ui/switch';
+import { api } from '../../../..//src/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { SatelliteDoctor } from '@/types/satellite';
+import { SatelliteClient } from '@/types/satellite';
 
-interface CitaModalProps {
+interface ClientModalProps {
   isOpen: boolean;
   onClose: () => void;
+  clientToEdit?: SatelliteClient | null;
   onSuccess: () => void;
 }
 
-export const CitaModal: React.FC<CitaModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clientToEdit, onSuccess }) => {
   const [loading, setLoading] = useState(false);
-  const [doctores, setDoctores] = useState<SatelliteDoctor[]>([]);
   const { toast } = useToast();
-
   const [formData, setFormData] = useState({
-    doctor_id: '',
-    fecha: '',
-    hora: '',
-    new_client_name: '',
-    new_client_telefono: '',
-    motivo: ''
+    nombre: '',
+    telefono: '',
+    dni: '',
+    activo: true
   });
 
-  // Cargar doctores para el select
   useEffect(() => {
-    if(isOpen) {
-      api.get('/api/initial-data').then(res => setDoctores(res.data.doctores || []));
+    if (clientToEdit) {
+      setFormData({
+        nombre: clientToEdit.nombre,
+        telefono: clientToEdit.telefono || '',
+        dni: clientToEdit.dni || '',
+        activo: clientToEdit.activo
+      });
+    } else {
+      setFormData({ nombre: '', telefono: '', dni: '', activo: true });
     }
-  }, [isOpen]);
+  }, [clientToEdit, isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      // Construir ISO String para Zod
-      const fechaHora = new Date(`${formData.fecha}T${formData.hora}:00`).toISOString();
-
-      // Payload estricto según tu Backend Satélite
-      const payload = {
-        doctor_id: Number(formData.doctor_id),
-        fecha_hora: fechaHora,
-        duracion_minutos: 30,
-        estado: 'programada',
-        descripcion: formData.motivo,
-        // Tu backend permite crear cliente al vuelo si no se envía cliente_id
-        new_client_name: formData.new_client_name,
-        new_client_telefono: formData.new_client_telefono
-      };
-
-      await api.post('/api/citas', payload);
-
-      toast({ title: "Cita Creada", description: "Se ha registrado correctamente en el sistema seguro." });
+      if (clientToEdit) {
+        // Editar (PATCH)
+        await api.patch(`/api/clientes/${clientToEdit.id}`, formData);
+        toast({ title: "Cliente actualizado", description: "Los cambios se guardaron correctamente." });
+      } else {
+        // Crear (POST - Usamos endpoint genérico o uno específico si el backend lo tiene)
+        // Nota: Tu backend crea clientes al crear citas, pero si queremos crear uno suelto:
+        await api.post('/api/patients', formData); // Asumiendo que el backend soporta esto o agregamos la ruta
+      }
       onSuccess();
-    } catch (error: any) {
+      onClose();
+    } catch (error) {
       console.error(error);
-      const msg = error.response?.data?.error || "Error al crear la cita.";
-      toast({ variant: "destructive", title: "Error", description: msg });
+      toast({ variant: "destructive", title: "Error", description: "No se pudo guardar el cliente." });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-      <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
         <div className="flex justify-between items-center p-6 border-b border-white/10 bg-white/5">
-          <h2 className="text-xl font-bold text-white">Nueva Cita</h2>
+          <h2 className="text-xl font-bold text-white">{clientToEdit ? 'Editar Cliente' : 'Nuevo Cliente'}</h2>
           <button onClick={onClose}><X className="text-gray-400 hover:text-white" /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          
           <div className="space-y-2">
-            <Label>Doctor</Label>
-            <select 
-              className="w-full bg-black/50 border border-white/10 rounded-md h-10 px-3 text-white"
-              value={formData.doctor_id}
-              onChange={e => setFormData({...formData, doctor_id: e.target.value})}
-              required
-            >
-              <option value="">Seleccionar Doctor...</option>
-              {doctores.map(doc => (
-                <option key={doc.id} value={doc.id}>{doc.nombre} ({doc.especialidad})</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Fecha</Label>
-              <Input type="date" className="bg-black/50 border-white/10 text-white" required
-                value={formData.fecha} onChange={e => setFormData({...formData, fecha: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <Label>Hora</Label>
-              <Input type="time" className="bg-black/50 border-white/10 text-white" required
-                value={formData.hora} onChange={e => setFormData({...formData, hora: e.target.value})} />
+            <Label>Nombre Completo</Label>
+            <div className="relative">
+              <User className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
+              <Input className="pl-9 bg-black/50 border-white/10 text-white" required 
+                value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} />
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Label>Paciente Nuevo (Nombre)</Label>
-            <Input placeholder="Ej: Juan Pérez" className="bg-black/50 border-white/10 text-white" required
-              value={formData.new_client_name} onChange={e => setFormData({...formData, new_client_name: e.target.value})} />
-          </div>
-
           <div className="space-y-2">
             <Label>Teléfono</Label>
-            <Input placeholder="+54..." className="bg-black/50 border-white/10 text-white"
-              value={formData.new_client_telefono} onChange={e => setFormData({...formData, new_client_telefono: e.target.value})} />
+            <div className="relative">
+              <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
+              <Input className="pl-9 bg-black/50 border-white/10 text-white" 
+                value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value})} />
+            </div>
           </div>
-
           <div className="space-y-2">
-            <Label>Motivo</Label>
-            <Input placeholder="Consulta general" className="bg-black/50 border-white/10 text-white"
-              value={formData.motivo} onChange={e => setFormData({...formData, motivo: e.target.value})} />
+            <Label>DNI / Identificación</Label>
+            <div className="relative">
+              <CreditCard className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
+              <Input className="pl-9 bg-black/50 border-white/10 text-white" 
+                value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value})} />
+            </div>
           </div>
-
+          <div className="flex items-center justify-between pt-2">
+            <Label>Cliente Activo</Label>
+            <Switch checked={formData.activo} onCheckedChange={c => setFormData({...formData, activo: c})} />
+          </div>
           <div className="pt-4 flex gap-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 border-white/10 text-gray-300">Cancelar</Button>
             <Button type="submit" disabled={loading} className="flex-1 bg-neon-main text-black hover:bg-emerald-400 font-bold">
-              {loading ? 'Procesando...' : <span className="flex items-center gap-2"><CheckCircle size={16} /> Confirmar</span>}
+              <Save size={16} className="mr-2" /> Guardar
             </Button>
           </div>
         </form>

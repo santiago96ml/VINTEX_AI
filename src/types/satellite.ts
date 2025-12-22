@@ -4,6 +4,7 @@ export interface SatelliteClient {
   dni?: string;
   telefono?: string;
   activo: boolean;
+  solicitud_de_secretaria?: boolean;
 }
 
 export interface SatelliteDoctor {
@@ -18,24 +19,29 @@ export interface SatelliteCita {
   id: number;
   doctor_id: number;
   cliente_id?: number;
-  fecha_hora: string; // ISO String
+  fecha_hora: string;
   duracion_minutos: number;
   estado: 'programada' | 'confirmada' | 'cancelada' | 'completada' | 'no_asistio';
   descripcion?: string;
-  cliente?: {
-    id: number;
-    nombre: string;
-    telefono?: string;
-    dni?: string;
-  };
-  doctor?: {
-    id: number;
-    nombre: string;
-    color: string;
+  cliente?: SatelliteClient;
+  doctor?: SatelliteDoctor;
+}
+
+export interface ChatMessage {
+  id: number;
+  session_id: string;
+  message: {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp?: string;
   };
 }
 
-export interface InitialDataResponse {
-  doctores: SatelliteDoctor[];
-  clientes: SatelliteClient[];
+export interface ClientFile {
+  id: number;
+  file_name: string;
+  file_type: string;
+  file_size_kb: number;
+  created_at: string;
+  storage_path: string;
 }

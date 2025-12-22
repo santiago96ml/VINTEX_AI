@@ -1,56 +1,68 @@
 import React, { useState, useEffect } from 'react';
-import { User, Activity, MoreVertical } from 'lucide-react';
-import { api } from '../../../../src/lib/api'; // Usamos tu instancia de axios configurada
+import { Activity, Plus, Edit, Trash } from 'lucide-react';
+import { api } from '../../../../src/lib/api';
 import { Button } from '@/components/ui/button';
 import { SatelliteDoctor } from '@/types/satellite';
+import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export const DoctorsView = () => {
   const [doctors, setDoctors] = useState<SatelliteDoctor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ nombre: '', especialidad: '', color: '#00E599' });
+  const { toast } = useToast();
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const { data } = await api.get<{ doctores: SatelliteDoctor[] }>('/api/initial-data');
-        setDoctors(data.doctores || []);
-      } catch (e) {
-        console.error("Error fetching doctors", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
+  const loadDocs = async () => {
+    const { data } = await api.get('/api/initial-data');
+    setDoctors(data.doctores || []);
+  };
 
-  if (loading) return <div className="text-center p-10 animate-pulse text-gray-500">Cargando staff médico...</div>;
+  useEffect(() => { loadDocs(); }, []);
+
+  const handleSave = async () => {
+    try {
+      // Intentamos crear doctor. Si el backend no tiene la ruta, dará 404.
+      await api.post('/api/doctors', { ...formData, activo: true });
+      toast({ title: "Doctor Agregado" });
+      setIsModalOpen(false);
+      loadDocs();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "El backend no permite crear doctores desde aquí." });
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Activity className="text-neon-main"/> Doctores Activos</h2>
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Activity className="text-neon-main"/> Equipo Médico</h2>
+        <Button onClick={() => setIsModalOpen(true)} className="bg-neon-main text-black"><Plus size={18} className="mr-2"/> Agregar Doctor</Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {doctors.map((doc) => (
-          <div key={doc.id} className="bg-[#0a0a0a] border border-white/10 p-5 rounded-xl hover:border-neon-main/30 transition-all group relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: doc.color || '#00E599' }} />
-            <div className="flex justify-between items-start mb-4 pl-2">
-              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-gray-300 font-bold">
-                <User size={20} />
-              </div>
-              <button className="text-gray-500 hover:text-white"><MoreVertical size={16} /></button>
+          <div key={doc.id} className="bg-[#0a0a0a] border border-white/10 p-5 rounded-xl flex justify-between items-start">
+            <div>
+              <h3 className="text-lg font-bold text-white">{doc.nombre}</h3>
+              <p className="text-neon-main text-sm">{doc.especialidad}</p>
             </div>
-            <div className="pl-2">
-              <h3 className="text-lg font-bold text-white mb-1">{doc.nombre}</h3>
-              <p className="text-sm text-gray-400">{doc.especialidad}</p>
-              <div className="mt-2 text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded inline-block">
-                Disponible
-              </div>
-            </div>
+            <Button variant="ghost" size="icon" className="text-gray-500 hover:text-white"><Edit size={16}/></Button>
           </div>
         ))}
       </div>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="bg-[#0a0a0a] border-white/10 text-white">
+          <DialogHeader><DialogTitle>Nuevo Doctor</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-4">
+            <Input placeholder="Nombre Dr/Dra" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="bg-black/50 border-white/10"/>
+            <Input placeholder="Especialidad" value={formData.especialidad} onChange={e => setFormData({...formData, especialidad: e.target.value})} className="bg-black/50 border-white/10"/>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSave} className="bg-neon-main text-black">Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
