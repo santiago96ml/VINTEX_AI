@@ -4,7 +4,7 @@ import { api } from '../../../../src/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SatelliteClient } from '@/types/satellite';
-import { ClientModal } from '../modals/ChatModal';
+import { ClientModal } from '../modals/ClientModal';
 import { ChatModal } from '../modals/ChatModal';
 import { FilesModal } from '../modals/FilesModal';
 
