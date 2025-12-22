@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabaseClient';
 import { Loader2 } from 'lucide-react'; 
@@ -17,10 +17,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
-import { Onboarding } from './pages/Onboarding'; 
-
-// 👇 ESTO ES LO QUE FALTABA: La conexión con tu Backend
-const API_URL = 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+// import { Onboarding } from './pages/Onboarding'; // Desactivado
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -30,64 +27,52 @@ const ScrollToTop = () => {
   return null;
 };
 
-// --- AUTH GUARD (Conectado al Backend) ---
+// --- AUTH GUARD SIMPLIFICADO ---
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Función única de verificación
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
+        // Definimos las rutas públicas explícitamente
         const publicRoutes = ['/', '/login', '/register', '/soluciones', '/tecnologia', '/casos-exito', '/demo'];
         const isPublicRoute = publicRoutes.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
 
         if (!session) {
-          if (!isPublicRoute) navigate('/login');
-          setLoading(false); // Importante: dejar de cargar si no hay sesión
-        } else {
-          // 👇 AQUÍ ESTÁ LA MAGIA: Llamamos al Backend para que repare el usuario si hace falta
-          console.log("📡 Conectando con Backend para verificar usuario...");
-          
-          const response = await fetch(`${API_URL}/api/config/init-session`, {
-              headers: { 'Authorization': `Bearer ${session.access_token}` }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            const isOnboardingPage = location.pathname === '/onboarding';
-            const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register';
-            const isHomePage = location.pathname === '/';
-
-            // Redirección inteligente basada en la respuesta del server
-            if (data.hasClinic) {
-                if (isOnboardingPage || isAuthEntryPage || isHomePage) {
-                    navigate('/dashboard', { replace: true });
-                }
-            } else {
-                if (location.pathname.startsWith('/dashboard') || isHomePage) {
-                    navigate('/onboarding', { replace: true });
-                }
-            }
-          } else {
-             console.error("❌ Error del Backend:", response.status);
+          // Si NO hay sesión y el usuario intenta entrar a una ruta privada (ej: /dashboard),
+          // lo mandamos al login.
+          if (!isPublicRoute) {
+            navigate('/login', { replace: true });
           }
-          setLoading(false);
+          // Si está en una ruta pública (como Home '/'), NO hacemos nada, se queda ahí.
+        } else {
+          // Si HAY sesión:
+          // 1. Evitamos que vuelva a entrar a Login o Register.
+          // 2. Si intenta entrar a /onboarding, lo redirigimos al dashboard.
+          const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/onboarding';
+          
+          if (isAuthEntryPage) {
+            navigate('/dashboard', { replace: true });
+          }
+          // Nota: Si el usuario logueado entra a '/', se queda en Home. 
+          // Si quieres que al entrar a '/' vaya directo al dashboard, descomenta la siguiente línea:
+          // if (location.pathname === '/') navigate('/dashboard', { replace: true });
         }
       } catch (error) {
         console.error("Error AuthCheck:", error);
+      } finally {
         setLoading(false);
       }
     };
 
     checkSession();
 
-    // Solo escuchamos el cierre de sesión para evitar bucles
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') navigate('/login');
+      if (event === 'SIGNED_OUT') navigate('/'); // Al cerrar sesión, ir a Home
     });
 
     return () => subscription.unsubscribe();
@@ -98,7 +83,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
             <Loader2 className="w-12 h-12 text-neon-main animate-spin" />
-            <p className="text-gray-400 text-sm animate-pulse">Verificando cuenta...</p>
+            <p className="text-gray-400 text-sm animate-pulse">Cargando Vintex AI...</p>
         </div>
       </div>
     );
@@ -109,6 +94,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
+  // Ocultamos navbar/footer solo en dashboard y onboarding (aunque onboarding ya redirige)
   const hideLayoutPaths = ['/dashboard', '/onboarding'];
   const shouldHideLayout = hideLayoutPaths.some(path => location.pathname.startsWith(path));
 
@@ -127,14 +113,21 @@ const AnimatedRoutes = () => {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
+        {/* Rutas Públicas */}
         <Route path="/" element={<Home />} />
         <Route path="/soluciones" element={<Solutions />} />
         <Route path="/tecnologia" element={<Technology />} />
         <Route path="/casos-exito" element={<SuccessStories />} />
         <Route path="/demo" element={<Demo />} />
+        
+        {/* Rutas de Autenticación */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/onboarding" element={<Onboarding />} />
+        
+        {/* Redirección forzada: Onboarding -> Dashboard */}
+        <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
+        
+        {/* Ruta Privada */}
         <Route path="/dashboard/*" element={<UserDashboard />} />
       </Routes>
     </AnimatePresence>
