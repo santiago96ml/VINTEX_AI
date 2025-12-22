@@ -1,139 +1,148 @@
-import { useState } from 'react';
-import { Search, Phone, Calendar, MessageSquare, FolderOpen, AlertCircle, FileText } from 'lucide-react';
-import { format } from 'date-fns';
-// CORRECCIÓN 1: Importación por defecto (sin llaves) porque es 'export default'
-import ChatModal from '../modals/ChatModal'; 
-import { FilesModal } from '../modals/FilesModal';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, Filter, MoreHorizontal, User } from 'lucide-react';
+import { supabase } from '../../../lib/supabaseClient';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
-export const PatientsView = ({ pacientes, citas, satelliteFetch, reload }: any) => {
-  const [search, setSearch] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<any>(null);
-  const [modalType, setModalType] = useState<'chat' | 'files' | null>(null);
+interface Patient {
+  id: string;
+  full_name?: string;
+  nombre?: string; // Soporte para español
+  email?: string;
+  phone?: string;
+  status?: string;
+  last_visit?: string;
+}
 
-  // Filtrado
-  const filtered = pacientes.filter((p: any) => 
-    p.nombre.toLowerCase().includes(search.toLowerCase()) || 
-    p.dni?.includes(search) || 
-    p.telefono?.includes(search)
-  );
+export const PatientsView = ({ tableName }: { tableName: string }) => {
+  // 1. Inicialización SEGURA con array vacío
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleToggleBot = async (p: any) => {
-    await satelliteFetch(`/clientes/${p.id}`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ activo: !p.activo }) 
-    });
-    reload();
-  };
+  useEffect(() => {
+    const loadPatients = async () => {
+      try {
+        setLoading(true);
+        if (!tableName) {
+          setPatients([]); 
+          return;
+        }
 
-  const handleResolveSecretary = async (p: any) => {
-    if (!p.solicitud_de_secretaría) return;
-    await satelliteFetch(`/clientes/${p.id}`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ solicitud_de_secretaria: false }) 
-    });
-    reload();
-  };
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('*')
+          .limit(50);
+
+        if (error) {
+          console.warn(`Error cargando tabla ${tableName}:`, error.message);
+          setPatients([]);
+        } else {
+          setPatients(data || []);
+        }
+      } catch (e) {
+        console.error("Error crítico en PatientsView:", e);
+        setPatients([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPatients();
+  }, [tableName]);
+
+  // 2. Filtrado SEGURO
+  // Usamos el operador ?. y || [] para asegurar que nunca falle
+  const filteredPatients = (patients || []).filter(p => {
+    const name = p.full_name || p.nombre || '';
+    return name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-neon-main animate-pulse">
+        Cargando base de datos de pacientes...
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-tech-card p-4 rounded-xl border border-gray-800">
-        <h2 className="text-xl font-bold text-white">Registro de Pacientes</h2>
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-2.5 text-gray-500" size={18} />
-          <input 
-            className="dark-input pl-10" 
-            placeholder="Buscar por nombre, DNI o teléfono..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+    <div className="space-y-6">
+      {/* Header y Filtros */}
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
+          <Input 
+            placeholder="Buscar paciente..." 
+            className="pl-9 bg-[#0a0a0a] border-white/10 text-white focus-visible:ring-neon-main"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="border-white/10 text-gray-300 hover:text-white hover:bg-white/5">
+            <Filter size={16} className="mr-2" /> Filtros
+          </Button>
+          <Button className="bg-neon-main text-black hover:bg-emerald-400 font-bold">
+            <Plus size={18} className="mr-2" /> Nuevo Paciente
+          </Button>
         </div>
       </div>
 
-      {/* Lista */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-        {filtered.map((p: any) => {
-          // Obtener última cita
-          const lastCita = citas
-            .filter((c: any) => c.cliente_id === p.id)
-            .sort((a: any, b: any) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())[0];
-
-          return (
-            <div key={p.id} className="bg-tech-card p-5 rounded-xl border border-gray-800 hover:border-gray-700 transition-colors shadow-lg">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    {p.nombre}
-                    {p.solicitud_de_secretaría && (
-                      <span className="text-xs bg-yellow-500/20 text-yellow-500 border border-yellow-500/50 px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
-                        <AlertCircle size={12} /> Solicita Atención
+      {/* Tabla de Pacientes */}
+      <div className="bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden">
+        {filteredPatients.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            No se encontraron pacientes.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-white/5 text-gray-400 font-medium">
+                <tr>
+                  <th className="px-6 py-4">Paciente</th>
+                  <th className="px-6 py-4">Contacto</th>
+                  <th className="px-6 py-4">Estado</th>
+                  <th className="px-6 py-4">Última Visita</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {filteredPatients.map((patient, i) => (
+                  <tr key={patient.id || i} className="hover:bg-white/5 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 font-bold">
+                          {(patient.full_name || patient.nombre || 'U').charAt(0)}
+                        </div>
+                        <span className="font-medium text-white">
+                          {patient.full_name || patient.nombre || 'Sin Nombre'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-gray-400">
+                      {patient.email || patient.phone || '-'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {patient.status || 'Activo'}
                       </span>
-                    )}
-                  </h3>
-                  <div className="flex flex-col gap-1 mt-2 text-sm text-gray-400">
-                    <span className="flex items-center gap-2"><Phone size={14}/> {p.telefono}</span>
-                    <span className="flex items-center gap-2"><FileText size={14}/> DNI: {p.dni || 'N/A'}</span>
-                    <span className="flex items-center gap-2 text-gray-500">
-                      <Calendar size={14}/> 
-                      {lastCita ? `${format(new Date(lastCita.fecha_hora), 'dd/MM/yy HH:mm')} (${lastCita.estado})` : 'Sin citas'}
-                    </span>
-                  </div>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-xs font-bold ${p.activo ? 'bg-green-500 text-black' : 'bg-red-500 text-white'}`}>
-                  {p.activo ? 'Bot Activo' : 'Bot Inactivo'}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-gray-800">
-                <button 
-                  onClick={() => handleToggleBot(p)}
-                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${p.activo ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}
-                >
-                  {p.activo ? 'Desactivar Bot' : 'Activar Bot'}
-                </button>
-                
-                <button 
-                  onClick={() => handleResolveSecretary(p)}
-                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${p.solicitud_de_secretaría ? 'bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20' : 'bg-gray-800 text-gray-500 cursor-default'}`}
-                >
-                  {p.solicitud_de_secretaría ? 'Resolver Solicitud' : 'Resuelta'}
-                </button>
-
-                <button 
-                  onClick={() => { setSelectedPatient(p); setModalType('chat'); }}
-                  className="py-2 px-3 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center justify-center gap-2"
-                >
-                  <MessageSquare size={16} /> Ver Chat
-                </button>
-
-                <button 
-                  onClick={() => { setSelectedPatient(p); setModalType('files'); }}
-                  className="py-2 px-3 rounded-lg text-sm font-medium bg-neon-main text-black hover:bg-neon-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-neon-main/20"
-                >
-                  <FolderOpen size={16} /> Archivos
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                    </td>
+                    <td className="px-6 py-4 text-gray-400">
+                      {patient.last_visit ? new Date(patient.last_visit).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button className="text-gray-500 hover:text-white p-2 rounded hover:bg-white/10">
+                        <MoreHorizontal size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
-      {/* CORRECCIÓN 2: Props actualizados para coincidir con ChatModal.tsx */}
-      {modalType === 'chat' && (
-        <ChatModal 
-          isOpen={true} 
-          onClose={() => setModalType(null)} 
-          telefonoCliente={selectedPatient?.telefono}
-        />
-      )}
-      
-      {modalType === 'files' && (
-        <FilesModal 
-          patient={selectedPatient} 
-          onClose={() => setModalType(null)} 
-          satelliteFetch={satelliteFetch} 
-        />
-      )}
     </div>
   );
 };
