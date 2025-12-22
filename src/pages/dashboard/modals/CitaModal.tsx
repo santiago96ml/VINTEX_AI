@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import api from "@/lib/api"; // Usamos nuestra nueva instancia segura
+import { api } from '../../../lib/api';
 
 // Tipos
 interface Doctor { id: number; nombre: string; }
