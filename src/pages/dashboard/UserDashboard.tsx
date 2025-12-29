@@ -1,19 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Calendar as CalendarIcon, 
   Menu, LogOut, Bell, Package, Activity, X,
-  Settings
+  Settings, School // ✅ Importamos el icono para Kennedy
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '../../lib/supabaseClient';
 import { clearApiConfig } from '../../lib/api'; 
-
-// Importamos las vistas
-import { MetricsView } from './views/MetricsView';
-import { PatientsView } from './views/PatientsView';
-import { DoctorsView } from './views/DoctorsView';
-import { AgendaView } from './views/AgendaView';
 
 // Definimos la interfaz para la configuración que viene del backend
 interface UIConfig {
@@ -23,7 +17,6 @@ interface UIConfig {
 }
 
 export const UserDashboard = () => {
-  const [activeView, setActiveView] = useState('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false); 
 
@@ -32,8 +25,10 @@ export const UserDashboard = () => {
   const [userProfile, setUserProfile] = useState<any>(null);
   
   const navigate = useNavigate();
+  const location = useLocation(); // ✅ Hook para detectar la ruta actual
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Detectar clics fuera del menú de usuario
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -44,6 +39,7 @@ export const UserDashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Carga de datos de usuario y configuración
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -79,39 +75,23 @@ export const UserDashboard = () => {
     navigate('/login');
   };
 
-  // Esta función ya solo se usará para casos especiales o logs, no para props obligatorias
-  const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
-
-  const renderContent = () => {
-    if (loading) return (
-      <div className="flex items-center justify-center h-full text-neon-main animate-pulse font-medium">
-        Cargando tu sistema...
-      </div>
-    );
-
-    switch (activeView) {
-      case 'overview': return <MetricsView />;
-      // ⚠️ AQUÍ ESTABA EL ERROR: Eliminamos la prop tableName
-      case 'patients': return <PatientsView />; 
-      case 'doctors': return <DoctorsView />;   
-      case 'agenda': return <AgendaView />;     
-      case 'inventory': return (
-        <div className="flex flex-col items-center justify-center h-96 text-gray-500 border-2 border-dashed border-gray-800 rounded-xl bg-white/5">
-          <Package size={48} className="mb-4 opacity-50"/>
-          <h3 className="text-lg font-medium mb-2">Módulo de Inventario</h3>
-          <p className="text-sm bg-black/50 px-3 py-1 rounded font-mono">Tabla: {getTableName('inventory')}</p>
-        </div>
-      );
-      default: return <MetricsView />;
-    }
+  // ✅ Función para determinar si una ruta está activa
+  const isActive = (path: string) => {
+    // Si es root '/dashboard', lo marcamos activo si estamos exactamente ahí o en metrics (opcional)
+    if (path === '/dashboard' && location.pathname === '/dashboard') return true;
+    // Para subrutas, verificamos si incluye el path
+    return location.pathname.includes(path) && path !== '/dashboard';
   };
 
-  const menuItems = [
-    { id: 'overview', label: 'Panel General', icon: LayoutDashboard },
-    { id: 'patients', label: 'Pacientes', icon: Users },
-    { id: 'doctors', label: 'Doctores', icon: Activity },
-    { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
-    { id: 'inventory', label: 'Inventario', icon: Package },
+  const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
+
+  // ✅ Definición de Items del Menú Principal
+  const mainMenuItems = [
+    { path: '/dashboard', label: 'Panel General', icon: LayoutDashboard }, // Ojo: Si usas una ruta hija por defecto, ajusta el path
+    { path: '/dashboard/patients', label: 'Pacientes', icon: Users },
+    { path: '/dashboard/doctors', label: 'Doctores', icon: Activity },
+    { path: '/dashboard/agenda', label: 'Agenda', icon: CalendarIcon },
+    // { path: '/dashboard/inventory', label: 'Inventario', icon: Package }, // Desactivado o mover a ruta real si existe
   ];
 
   return (
@@ -123,25 +103,47 @@ export const UserDashboard = () => {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neon-main to-emerald-600 shadow-[0_0_15px_rgba(0,229,153,0.3)]" />
           <span className="font-bold text-lg tracking-tight text-white">Vintex OS</span>
         </div>
+        
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => (
+          {/* Módulos Principales */}
+          {mainMenuItems.map((item) => (
             <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
+              key={item.path}
+              onClick={() => navigate(item.path)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative outline-none
-                ${activeView === item.id 
+                ${isActive(item.path)
                   ? 'bg-neon-main/10 text-neon-main shadow-[inset_0_0_0_1px_rgba(0,229,153,0.2)]' 
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
                 }`}
             >
-              <item.icon size={20} className={activeView === item.id ? 'text-neon-main' : 'group-hover:text-white'} />
+              <item.icon size={20} className={isActive(item.path) ? 'text-neon-main' : 'group-hover:text-white'} />
               <span className="font-medium">{item.label}</span>
-              {activeView === item.id && (
+              {isActive(item.path) && (
                 <motion.div layoutId="activeIndicator" className="absolute right-2 w-1.5 h-1.5 rounded-full bg-neon-main" />
               )}
             </button>
           ))}
+
+          {/* ✅ SECCIÓN SATÉLITES / KENNEDY */}
+          <div className="mt-6 mb-2 px-2">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Satélites</p>
+          </div>
+          
+          <button
+            onClick={() => navigate('/dashboard/kennedy')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative outline-none
+              ${isActive('/dashboard/kennedy')
+                ? 'bg-indigo-500/20 text-indigo-400 shadow-[inset_0_0_0_1px_rgba(129,140,248,0.3)]' // Estilo especial para Kennedy (Indigo)
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
+              }`}
+          >
+            <School size={20} className={isActive('/dashboard/kennedy') ? 'text-indigo-400' : 'group-hover:text-white'} />
+            <span className="font-medium">Punto Kennedy</span>
+          </button>
+
         </nav>
+
+        {/* Footer Sidebar */}
         <div className="p-4 border-t border-white/10 bg-black/20">
           <div className="flex items-center gap-3">
              <div className="w-8 h-8 rounded-full bg-neon-main/20 flex items-center justify-center text-neon-main font-bold ring-1 ring-neon-main/30">
@@ -166,16 +168,29 @@ export const UserDashboard = () => {
               </button>
             </div>
             <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-              {menuItems.map((item) => (
+              {mainMenuItems.map((item) => (
                 <button
-                  key={item.id}
-                  onClick={() => { setActiveView(item.id); setIsMobileMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium ${activeView === item.id ? 'bg-neon-main/20 text-neon-main' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                  key={item.path}
+                  onClick={() => { navigate(item.path); setIsMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium ${isActive(item.path) ? 'bg-neon-main/20 text-neon-main' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
                 >
                   <item.icon size={20} />
                   <span>{item.label}</span>
                 </button>
               ))}
+              
+              {/* Kennedy Mobile */}
+              <div className="mt-4 mb-2 px-2 border-t border-white/10 pt-2">
+                 <p className="text-xs font-bold text-gray-600 uppercase">Satélites</p>
+              </div>
+              <button
+                  onClick={() => { navigate('/dashboard/kennedy'); setIsMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium ${isActive('/dashboard/kennedy') ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                >
+                  <School size={20} />
+                  <span>Punto Kennedy</span>
+                </button>
+
             </nav>
              <div className="p-4 border-t border-white/10">
                 <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-rose-400 hover:bg-rose-500/10 transition-colors">
@@ -194,7 +209,9 @@ export const UserDashboard = () => {
               <Menu size={24} />
             </button>
             <h1 className="text-xl font-bold bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent truncate">
-              {menuItems.find(i => i.id === activeView)?.label}
+              {/* Lógica simple para mostrar título basado en ruta */}
+              {location.pathname.includes('kennedy') ? 'Punto Kennedy' : 
+               mainMenuItems.find(i => isActive(i.path))?.label || 'Panel General'}
             </h1>
           </div>
 
@@ -220,7 +237,7 @@ export const UserDashboard = () => {
                   </div>
                   <div className="px-2">
                       <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-white/10 hover:text-white rounded-lg flex items-center gap-2 transition-colors">
-                         <Settings size={16} /> Configuración
+                          <Settings size={16} /> Configuración
                       </button>
                   </div>
                   <div className="h-px bg-white/10 my-2 mx-2" />
@@ -240,7 +257,14 @@ export const UserDashboard = () => {
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 relative scroll-smooth">
           <div className="max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-300 delay-100">
-            {renderContent()}
+             {/* ✅ AQUÍ ESTÁ EL CAMBIO CLAVE: Renderizamos Outlet en lugar del switch */}
+             {loading ? (
+                <div className="flex items-center justify-center h-full text-neon-main animate-pulse font-medium">
+                  Cargando tu sistema...
+                </div>
+             ) : (
+                <Outlet />
+             )}
           </div>
         </div>
       </main>

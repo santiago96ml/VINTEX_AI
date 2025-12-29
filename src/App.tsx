@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate, Outlet } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabaseClient';
 import { Loader2 } from 'lucide-react'; 
@@ -17,6 +17,10 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
+
+// ✅ NUEVO: Import para la vista Kennedy
+import KennedyView from './pages/dashboard/views/kennedy/KennedyView';
+
 // import { Onboarding } from './pages/Onboarding'; // Desactivado
 
 const ScrollToTop = () => {
@@ -43,24 +47,17 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
         const isPublicRoute = publicRoutes.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
 
         if (!session) {
-          // Si NO hay sesión y el usuario intenta entrar a una ruta privada (ej: /dashboard),
-          // lo mandamos al login.
+          // Si NO hay sesión y el usuario intenta entrar a una ruta privada
           if (!isPublicRoute) {
             navigate('/login', { replace: true });
           }
-          // Si está en una ruta pública (como Home '/'), NO hacemos nada, se queda ahí.
         } else {
           // Si HAY sesión:
-          // 1. Evitamos que vuelva a entrar a Login o Register.
-          // 2. Si intenta entrar a /onboarding, lo redirigimos al dashboard.
           const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/onboarding';
           
           if (isAuthEntryPage) {
             navigate('/dashboard', { replace: true });
           }
-          // Nota: Si el usuario logueado entra a '/', se queda en Home. 
-          // Si quieres que al entrar a '/' vaya directo al dashboard, descomenta la siguiente línea:
-          // if (location.pathname === '/') navigate('/dashboard', { replace: true });
         }
       } catch (error) {
         console.error("Error AuthCheck:", error);
@@ -94,7 +91,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  // Ocultamos navbar/footer solo en dashboard y onboarding (aunque onboarding ya redirige)
+  // Ocultamos navbar/footer solo en dashboard y onboarding
   const hideLayoutPaths = ['/dashboard', '/onboarding'];
   const shouldHideLayout = hideLayoutPaths.some(path => location.pathname.startsWith(path));
 
@@ -112,6 +109,10 @@ const AnimatedRoutes = () => {
 
   return (
     <AnimatePresence mode="wait">
+      {/* Usamos location.pathname.split('/')[1] para la key si queremos evitar 
+         que el Dashboard entero se remonte al cambiar sub-rutas, 
+         o location.pathname si queremos animación por cada cambio.
+      */}
       <Routes location={location} key={location.pathname}>
         {/* Rutas Públicas */}
         <Route path="/" element={<Home />} />
@@ -127,8 +128,21 @@ const AnimatedRoutes = () => {
         {/* Redirección forzada: Onboarding -> Dashboard */}
         <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
         
-        {/* Ruta Privada */}
-        <Route path="/dashboard/*" element={<UserDashboard />} />
+        {/* ✅ Rutas Privadas / Dashboard 
+            Aquí se integra la lógica anidada para KennedyView.
+            UserDashboard debe tener un <Outlet /> para renderizar 'kennedy'.
+        */}
+        <Route path="/dashboard" element={<UserDashboard />}>
+            {/* Ruta para Punto Kennedy: vintex.ai/dashboard/kennedy */}
+            <Route path="kennedy" element={<KennedyView />} />
+            
+            {/* Puedes agregar aquí otras sub-rutas si UserDashboard usa <Outlet> */}
+            {/* <Route path="patients" element={<PatientsView />} /> */}
+        </Route>
+
+        {/* Captura para subrutas profundas si no matchean arriba (opcional, depende de tu config) */}
+        {/* Si UserDashboard maneja sus propias rutas internamente sin Outlet, usarías /dashboard/* */}
+        
       </Routes>
     </AnimatePresence>
   );
