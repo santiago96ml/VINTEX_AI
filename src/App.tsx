@@ -13,7 +13,7 @@ import { Home } from './pages/Home';
 import { Solutions } from './pages/Solutions';
 import { Technology } from './pages/Technology';
 import { SuccessStories } from './pages/SuccessStories';
-import { Login } from './pages/Login';
+import   Login   from './pages/Login';
 import { Register } from './pages/Register';
 import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
@@ -21,7 +21,11 @@ import { UserDashboard } from './pages/dashboard/UserDashboard';
 // ✅ NUEVO: Import para la vista Kennedy
 import KennedyView from './pages/dashboard/views/kennedy/KennedyView';
 
-// import { Onboarding } from './pages/Onboarding'; // Desactivado
+// ✅ REACTIVADO: Import para la vista Patients (Asegúrate de que la ruta del archivo sea correcta)
+import {PatientsView} from './pages/dashboard/views/PatientsView'; 
+
+// ✅ REACTIVADO: Onboarding
+import { Onboarding } from './pages/Onboarding'; 
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -53,7 +57,8 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
           }
         } else {
           // Si HAY sesión:
-          const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/onboarding';
+          // NOTA: He quitado '/onboarding' de aquí para que el usuario logueado pueda verlo si es necesario.
+          const isAuthEntryPage = location.pathname === '/login' || location.pathname === '/register';
           
           if (isAuthEntryPage) {
             navigate('/dashboard', { replace: true });
@@ -110,8 +115,8 @@ const AnimatedRoutes = () => {
   return (
     <AnimatePresence mode="wait">
       {/* Usamos location.pathname.split('/')[1] para la key si queremos evitar 
-         que el Dashboard entero se remonte al cambiar sub-rutas, 
-         o location.pathname si queremos animación por cada cambio.
+          que el Dashboard entero se remonte al cambiar sub-rutas, 
+          o location.pathname si queremos animación por cada cambio.
       */}
       <Routes location={location} key={location.pathname}>
         {/* Rutas Públicas */}
@@ -125,8 +130,8 @@ const AnimatedRoutes = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Redirección forzada: Onboarding -> Dashboard */}
-        <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
+        {/* ✅ REACTIVADO: Ruta Onboarding restaurada */}
+        <Route path="/onboarding" element={<Onboarding />} />
         
         {/* ✅ Rutas Privadas / Dashboard 
             Aquí se integra la lógica anidada para KennedyView.
@@ -136,8 +141,8 @@ const AnimatedRoutes = () => {
             {/* Ruta para Punto Kennedy: vintex.ai/dashboard/kennedy */}
             <Route path="kennedy" element={<KennedyView />} />
             
-            {/* Puedes agregar aquí otras sub-rutas si UserDashboard usa <Outlet> */}
-            {/* <Route path="patients" element={<PatientsView />} /> */}
+            {/* ✅ REACTIVADO: Ruta Patients activada correctamente */}
+            <Route path="patients" element={<PatientsView />} />
         </Route>
 
         {/* Captura para subrutas profundas si no matchean arriba (opcional, depende de tu config) */}
