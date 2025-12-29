@@ -1,159 +1,189 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
-import { setApiUrl } from '../lib/api'; // Importamos la nueva función
+import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabaseClient';
+import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { ParticleNetwork } from '@/components/canvas/ParticleNetwork';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowRight } from 'lucide-react';
-import { Navbar } from '../components/layout/Navbar';
-import { GlassCard } from '../components/ui/GlassCard';
+import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react';
+import { SocialButtons } from '@/features/auth/SocialButtons';
 
-export const Login = () => {
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // 1. Autenticación con Supabase (Capa Auth Global)
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const { error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
       });
 
       if (error) throw error;
-      if (!data.session) throw new Error('No session created');
 
-      // 2. CONSULTAR AL MOTOR MAESTRO: "¿Quién es este usuario?"
-      // Usamos la URL original del .env para esta pregunta inicial
-      const masterUrl = import.meta.env.VITE_API_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host/';
-      
-      const initResponse = await fetch(`${masterUrl}/api/config/init-session`, {
-        headers: {
-          'Authorization': `Bearer ${data.session.access_token}`
-        }
+      toast({
+        title: "¡Bienvenido de nuevo!",
+        description: "Has iniciado sesión correctamente.",
+        className: "bg-green-500/10 border-green-500/20 text-white",
       });
 
-      if (!initResponse.ok) throw new Error('Error inicializando sesión en el motor.');
-
-      const config = await initResponse.json();
-
-      // 3. LÓGICA DE REDIRECCIÓN O CAMBIO DE ENCHUFE
-      
-      // CASO A: Redirección a Frontend Dedicado (URL externa)
-      if (config.redirect && config.url) {
-        toast({ title: "Redirigiendo...", description: "Accediendo a tu entorno dedicado." });
-        window.location.href = config.url;
-        return;
-      }
-
-      // CASO B: Backend Satélite (Mismo Frontend, distinta API)
-      if (config.backendUrl) {
-        console.log("🔌 Conectando a infraestructura:", config.backendUrl);
-        setApiUrl(config.backendUrl); // Guardamos la nueva URL
-      }
-
-      // 4. NAVEGACIÓN
-      if (config.hasClinic) {
-        navigate('/dashboard');
-      } else {
-        navigate('/onboarding');
-      }
-
+      navigate('/dashboard');
     } catch (error: any) {
-      console.error(error);
       toast({
+        title: "Error al iniciar sesión",
+        description: error.message || "Credenciales incorrectas",
         variant: "destructive",
-        title: "Error de acceso",
-        description: error.message || "Credenciales incorrectas.",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-neon-main/30">
-      <Navbar />
-      
-      <div className="container mx-auto px-4 pt-32 pb-20 flex flex-col items-center justify-center min-h-[80vh]">
-        
-        {/* Decorative Background */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-neon-main/10 rounded-full blur-[100px] -z-10" />
+  // Lógica para Google (por si SocialButtons necesita props o lógica extra)
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Error con Google",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
-        <div className="w-full max-w-md space-y-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Bienvenido de nuevo</h1>
-            <p className="text-gray-400">Accede a tu ecosistema digital</p>
+  return (
+    <div className="min-h-screen bg-black selection:bg-neon-main selection:text-black font-sans text-white overflow-hidden relative flex flex-col">
+      {/* Fondo Animado idéntico a Registro */}
+      <div className="fixed inset-0 z-0">
+        <ParticleNetwork />
+      </div>
+
+      <Navbar />
+
+      <main className="flex-grow relative z-10 container mx-auto px-6 py-24 flex items-center justify-center">
+        <GlassCard className="w-full max-w-md p-8 backdrop-blur-xl border-white/10 shadow-2xl shadow-neon-main/5 animate-in fade-in zoom-in-95 duration-500">
+          
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-400 mb-2">
+              Bienvenido a Vintex AI
+            </h1>
+            <p className="text-gray-400 text-sm">
+              Inicia sesión para acceder a tu panel de control
+            </p>
           </div>
 
-          <GlassCard className="p-8 border-white/10 backdrop-blur-xl">
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Corporativo</Label>
+          {/* Botones Sociales (Google) */}
+          <div className="mb-6">
+            <SocialButtons />
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-black/50 px-2 text-gray-500 font-mono backdrop-blur-sm">
+                  O continúa con email
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Formulario de Login */}
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-neon-main">
+                Email Corporativo
+              </Label>
+              <div className="relative group">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-500 group-focus-within:text-neon-main transition-colors" />
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="nombre@empresa.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-black/40 border-white/10 text-white placeholder:text-gray-600 focus:border-neon-main/50 focus:ring-neon-main/20"
+                  value={formData.email}
+                  onChange={handleChange}
                   required
+                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus:border-neon-main/50 focus:ring-neon-main/20 transition-all"
                 />
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Contraseña</Label>
-                  <Link to="#" className="text-xs text-neon-main hover:text-neon-main/80">
-                    ¿Olvidaste tu contraseña?
-                  </Link>
-                </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-neon-main">
+                  Contraseña
+                </Label>
+                <Link 
+                  to="/forgot-password" 
+                  className="text-xs text-gray-400 hover:text-white transition-colors hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
+              <div className="relative group">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-500 group-focus-within:text-neon-main transition-colors" />
                 <Input
                   id="password"
+                  name="password"
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-black/40 border-white/10 text-white focus:border-neon-main/50 focus:ring-neon-main/20"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={handleChange}
                   required
+                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus:border-neon-main/50 focus:ring-neon-main/20 transition-all"
                 />
               </div>
-
-              <Button 
-                type="submit" 
-                className="w-full bg-neon-main text-black hover:bg-emerald-400 font-medium h-11"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Autenticando...
-                  </>
-                ) : (
-                  <>
-                    Iniciar Sesión
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-6 text-center text-sm text-gray-500">
-              ¿Aún no tienes cuenta?{' '}
-              <Link to="/register" className="text-neon-main hover:underline">
-                Crear cuenta
-              </Link>
             </div>
-          </GlassCard>
-        </div>
-      </div>
+
+            <Button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-neon-main to-cyan-400 hover:from-neon-main/90 hover:to-cyan-400/90 text-black font-bold py-6 shadow-lg shadow-neon-main/20 transition-all duration-300 group mt-4"
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Iniciar Sesión
+                  <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-gray-400">
+            ¿Aún no tienes cuenta?{' '}
+            <Link to="/register" className="text-white hover:text-neon-main font-semibold transition-colors">
+              Crear cuenta gratis
+            </Link>
+          </div>
+        </GlassCard>
+      </main>
+
+      <Footer />
     </div>
   );
-};
+}

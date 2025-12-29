@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Calendar as CalendarIcon, 
-  Menu, LogOut, Bell, Package, Activity, X,
+  Menu, LogOut, Bell, Activity, X,
   Settings, School // ✅ Importamos el icono para Kennedy
 } from 'lucide-react';
 import { motion } from 'framer-motion';
