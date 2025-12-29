@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Calendar as CalendarIcon, 
   Menu, LogOut, Bell, Package, Activity, X,
-  Settings // <--- Faltaba importar esto
+  Settings
 } from 'lucide-react';
-import { motion } from 'framer-motion'; // <--- Faltaba importar esto
+import { motion } from 'framer-motion';
 import { supabase } from '../../lib/supabaseClient';
 import { clearApiConfig } from '../../lib/api'; 
 
@@ -24,7 +24,6 @@ interface UIConfig {
 
 export const UserDashboard = () => {
   const [activeView, setActiveView] = useState('overview');
-  // Estados para controlar los menús nativos
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false); 
 
@@ -35,7 +34,6 @@ export const UserDashboard = () => {
   const navigate = useNavigate();
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Efecto para cerrar el menú de usuario al hacer clic fuera de él
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -46,18 +44,15 @@ export const UserDashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Efecto de carga inicial (Perfil y Configuración)
   useEffect(() => {
     const loadData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { navigate('/login'); return; }
 
-        // 1. Cargar Perfil
         const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
         setUserProfile(profile);
 
-        // 2. Cargar Configuración de UI (para saber qué tablas usar)
         const { data: webConfig } = await supabase
           .from('web_clinica')
           .select('ui_config')
@@ -65,10 +60,8 @@ export const UserDashboard = () => {
           .maybeSingle();
 
         if (webConfig?.ui_config) {
-          // Aseguramos que TypeScript lo trate como UIConfig
           setConfig(webConfig.ui_config as UIConfig);
         } else {
-          // Configuración por defecto si no hay nada en DB
           setConfig({ tables: { patients: 'pacientes', doctors: 'doctores', appointments: 'citas' } }); 
         }
       } catch (e) {
@@ -82,14 +75,13 @@ export const UserDashboard = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    clearApiConfig(); // Limpia la URL del backend satélite si la hubiera
+    clearApiConfig();
     navigate('/login');
   };
 
-  // Función helper para obtener el nombre real de la tabla
+  // Esta función ya solo se usará para casos especiales o logs, no para props obligatorias
   const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
 
-  // Renderizado dinámico del contenido principal
   const renderContent = () => {
     if (loading) return (
       <div className="flex items-center justify-center h-full text-neon-main animate-pulse font-medium">
@@ -99,10 +91,10 @@ export const UserDashboard = () => {
 
     switch (activeView) {
       case 'overview': return <MetricsView />;
-      // Inyectamos el nombre real de la tabla a cada vista
-      case 'patients': return <PatientsView tableName={getTableName('patients')} />;
-      case 'doctors': return <DoctorsView tableName={getTableName('doctors')} />;
-      case 'agenda': return <AgendaView tableName={getTableName('appointments')} />;
+      // ⚠️ AQUÍ ESTABA EL ERROR: Eliminamos la prop tableName
+      case 'patients': return <PatientsView />; 
+      case 'doctors': return <DoctorsView />;   
+      case 'agenda': return <AgendaView />;     
       case 'inventory': return (
         <div className="flex flex-col items-center justify-center h-96 text-gray-500 border-2 border-dashed border-gray-800 rounded-xl bg-white/5">
           <Package size={48} className="mb-4 opacity-50"/>
@@ -150,7 +142,6 @@ export const UserDashboard = () => {
             </button>
           ))}
         </nav>
-        {/* User Profile Info (Optional Footer) */}
         <div className="p-4 border-t border-white/10 bg-black/20">
           <div className="flex items-center gap-3">
              <div className="w-8 h-8 rounded-full bg-neon-main/20 flex items-center justify-center text-neon-main font-bold ring-1 ring-neon-main/30">
@@ -197,7 +188,6 @@ export const UserDashboard = () => {
 
       {/* --- MAIN CONTENT --- */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#050505] relative">
-        {/* Header */}
         <header className="h-16 border-b border-white/10 flex items-center justify-between px-4 md:px-8 bg-black/80 backdrop-blur-md sticky top-0 z-20">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
@@ -209,13 +199,11 @@ export const UserDashboard = () => {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">
-            {/* Notifications */}
             <button className="relative p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-neon-main/50">
               <Bell size={20} />
               <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 border-2 border-black rounded-full" />
             </button>
             
-            {/* USER MENU (NATIVO) */}
             <div className="relative" ref={userMenuRef}>
               <button 
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -224,7 +212,6 @@ export const UserDashboard = () => {
                 {userProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
               </button>
 
-              {/* Dropdown Menu Nativo */}
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-3 w-64 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 origin-top-right backdrop-blur-xl">
                   <div className="px-4 py-3 border-b border-white/5 bg-white/5 mx-2 rounded-t-lg mb-2">
@@ -251,7 +238,6 @@ export const UserDashboard = () => {
           </div>
         </header>
 
-        {/* Viewport */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 relative scroll-smooth">
           <div className="max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-300 delay-100">
             {renderContent()}
