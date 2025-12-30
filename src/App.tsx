@@ -13,7 +13,7 @@ import { Home } from './pages/Home';
 import { Solutions } from './pages/Solutions';
 import { Technology } from './pages/Technology';
 import { SuccessStories } from './pages/SuccessStories';
-import   Login   from './pages/Login';
+import Login from './pages/Login';
 import { Register } from './pages/Register';
 import { Demo } from './pages/Demo';
 import { UserDashboard } from './pages/dashboard/UserDashboard'; 
