@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host',
+        target: 'https://login.vintex.net.br/',
         changeOrigin: true,
         secure: false,
       }

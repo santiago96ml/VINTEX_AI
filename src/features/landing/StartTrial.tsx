@@ -8,7 +8,7 @@ export const StartTrial: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://webs-de-vintex-login-web.1kh9sk.easypanel.host';
+  const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://login.vintex.net.br/';
 
   const benefits = ["Prueba gratuita de 14 días", "Sin tarjeta de crédito", "Migración incluida", "Soporte WhatsApp", "API Completa"];
 
