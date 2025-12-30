@@ -25,7 +25,11 @@ import KennedyView from './pages/dashboard/views/kennedy/KennedyView';
 import {PatientsView} from './pages/dashboard/views/PatientsView'; 
 
 // ✅ REACTIVADO: Onboarding
-import { Onboarding } from './pages/Onboarding'; 
+import { Onboarding } from './pages/Onboarding';
+
+import { AgendaView } from './pages/dashboard/views/AgendaView'; 
+
+import { DoctorsView } from './pages/dashboard/views/DoctorsView'; 
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -142,6 +146,12 @@ const AnimatedRoutes = () => {
             <Route path="kennedy" element={<KennedyView />} />
             
             {/* ✅ REACTIVADO: Ruta Patients activada correctamente */}
+            <Route path="patients" element={<PatientsView />} />
+
+            <Route path="agenda" element={<AgendaView />} />
+
+            <Route path="doctors" element={<DoctorsView />} />
+            
             <Route path="patients" element={<PatientsView />} />
         </Route>
 
