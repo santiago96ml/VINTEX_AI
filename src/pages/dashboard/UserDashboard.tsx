@@ -83,7 +83,7 @@ export const UserDashboard = () => {
     return location.pathname.includes(path) && path !== '/dashboard';
   };
 
-  const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
+ const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
 
   // ✅ Definición de Items del Menú Principal
   const mainMenuItems = [
