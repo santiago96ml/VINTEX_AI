@@ -20,7 +20,7 @@ export const UserDashboard = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false); 
 
-  const [config, setConfig] = useState<UIConfig | null>(null);
+  const [, setConfig] = useState<UIConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
   
@@ -83,7 +83,7 @@ export const UserDashboard = () => {
     return location.pathname.includes(path) && path !== '/dashboard';
   };
 
- const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
+// const getTableName = (key: string) => config?.tables?.[key] || `app_${key}`;
 
   // ✅ Definición de Items del Menú Principal
   const mainMenuItems = [
