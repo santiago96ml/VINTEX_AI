@@ -7,7 +7,7 @@ const API_URL_KEY = 'vintex_active_backend_url';
 // 1. Obtener la URL actual (o la default del .env)
 export const getApiUrl = () => {
   const storedUrl = localStorage.getItem(API_URL_KEY);
-  return storedUrl || import.meta.env.VITE_API_URL || 'https://clinica.vintex.net.br/';
+  return storedUrl || import.meta.env.VITE_API_URL || 'https://clinica.vintex.net.br//';
 };
 
 // 2. Función para "Enchufar" el frontend a otro backend (Satélite)
