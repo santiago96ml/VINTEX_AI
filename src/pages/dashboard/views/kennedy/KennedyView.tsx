@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Users, MessageCircle, Search, Filter, ChevronDown, 
-  DollarSign, Save, FileCheck, Download, FilePenLine, 
+   Save, FileCheck, Download, FilePenLine, 
   Sparkles, Loader2, Copy, BookOpen, GraduationCap, 
   CreditCard, Info, SearchX, ChevronRight
 } from 'lucide-react';
