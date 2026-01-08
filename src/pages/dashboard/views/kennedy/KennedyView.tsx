@@ -11,12 +11,12 @@ import { supabase } from '@/lib/supabaseClient';
 // --- CONFIGURACIÓN ---
 const API_URL = import.meta.env.VITE_KENNEDY_API_URL || 'http://localhost:4001/api';
 
-const OPENROUTER_API_KEY = ""; // ⚠️ Pega tu Key aquí o usa .env
+const OPENROUTER_API_KEY = "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"; // ⚠️ Pega tu Key aquí o usa .env
 const AI_MODEL = "xiaomi/mimo-v2-flash:free";
 
 // Helper de IA (OpenRouter)
 const callOpenRouter = async (prompt: string): Promise<string> => {
-  if (!OPENROUTER_API_KEY) return "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";
+  if (!OPENROUTER_API_KEY) return "Sistema de IA no configurado.";
   
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
