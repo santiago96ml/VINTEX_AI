@@ -179,10 +179,6 @@ export const UserDashboard = () => {
                 </button>
               ))}
               
-              {/* Kennedy Mobile */}
-              <div className="mt-4 mb-2 px-2 border-t border-white/10 pt-2">
-                 <p className="text-xs font-bold text-gray-600 uppercase">Satélites</p>
-              </div>
               <button
                   onClick={() => { navigate('/dashboard/kennedy'); setIsMobileMenuOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium ${isActive('/dashboard/kennedy') ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}

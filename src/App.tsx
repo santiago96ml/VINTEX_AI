@@ -31,6 +31,8 @@ import { AgendaView } from './pages/dashboard/views/AgendaView';
 
 import { DoctorsView } from './pages/dashboard/views/DoctorsView'; 
 
+import MetricsView from './pages/dashboard/views/MetricsView';
+
 const ScrollToTop = () => {
   const { pathname } = useLocation();
   React.useEffect(() => {
@@ -142,6 +144,7 @@ const AnimatedRoutes = () => {
             UserDashboard debe tener un <Outlet /> para renderizar 'kennedy'.
         */}
         <Route path="/dashboard" element={<UserDashboard />}>
+        <Route index element={<MetricsView />} />
             {/* Ruta para Punto Kennedy: vintex.ai/dashboard/kennedy */}
             <Route path="kennedy" element={<KennedyView />} />
             

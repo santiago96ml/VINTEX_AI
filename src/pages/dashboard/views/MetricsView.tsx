@@ -15,21 +15,27 @@ export default function MetricsView() {
   const [stats, setStats] = useState<ClinicStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ CORREGIDO: Usamos tu URL de producción REAL
-  // Quitamos la barra '/' final para evitar dobles barras en la petición
-  const API_URL = import.meta.env.VITE_API_URL || 'https://clinica.vintex.net.br';
+  // Usamos tu URL de producción REAL
+  const API_URL = import.meta.env.VITE_API_URL || 'https://clinica1.vintex.net.br';
 
   useEffect(() => {
     async function fetchStats() {
+      // 🔍 LOG 1: Verificar que la función arranca
+      console.log("🔄 Iniciando fetchStats..."); 
+      
       try {
         // 1. Obtener Token de la sesión actual
         const { data: { session } } = await supabase.auth.getSession();
+        
+        // 🔍 LOG 2: Verificar qué devuelve Supabase (null o objeto sesión)
+        console.log("🔑 Estado de Sesión:", session); 
+
         const token = session?.access_token;
 
         if (!token) {
-          console.error("⛔ No hay sesión activa");
+          console.error("⛔ No hay sesión activa (Token es null o undefined)");
           setLoading(false);
-          return;
+          return; // Aquí es donde se detiene si no hay login
         }
 
         console.log("📡 Conectando a:", `${API_URL}/api/metrics`);
@@ -48,8 +54,12 @@ export default function MetricsView() {
         }
 
         const data = await response.json();
-        console.log("✅ Métricas recibidas:", data);
-        setStats(data);
+        console.log("✅ Métricas recibidas (Raw):", data);
+
+        // PEQUEÑA MEJORA DE SEGURIDAD: 
+        // Si data es un array (como sospechamos), tomamos el primer elemento.
+        const statsData = Array.isArray(data) ? data[0] : data;
+        setStats(statsData);
 
       } catch (err) {
         console.error('❌ Error cargando estadísticas:', err);
