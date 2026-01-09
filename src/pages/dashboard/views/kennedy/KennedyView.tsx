@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Users, MessageCircle, Search, Filter, ChevronDown, 
- Save, FileCheck, Download, FilePenLine, 
+  Save, FileCheck, Download, FilePenLine, 
   Sparkles, Loader2, Copy, BookOpen, GraduationCap, 
   CreditCard, Info, SearchX, ChevronRight
 } from 'lucide-react';
@@ -11,31 +11,31 @@ import { supabase } from '@/lib/supabaseClient';
 // --- CONFIGURACIÓN ---
 const API_URL = import.meta.env.VITE_KENNEDY_API_URL || 'http://localhost:4001/api';
 
-const OPENROUTER_API_KEY = "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"; // ⚠️ Pega tu Key aquí o usa .env
-const AI_MODEL = "xiaomi/mimo-v2-flash:free";
+// Ya no necesitamos la API Key aquí, ahora vive segura en el Backend
 
-// Helper de IA (OpenRouter)
-const callOpenRouter = async (prompt: string): Promise<string> => {
-  if (!OPENROUTER_API_KEY) return "Sistema de IA no configurado.";
-  
+const getAuthHeader = async (): Promise<Record<string, string>> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+};
+
+// Nueva función: Llama a TU Backend, no a OpenRouter directo
+const callBackendAI = async (prompt: string): Promise<string> => {
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const headers = await getAuthHeader();
+    
+    const response = await fetch(`${API_URL}/ai/generate`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        ...headers,
         "Content-Type": "application/json",
-        "HTTP-Referer": window.location.origin,
       },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [{ role: "user", content: prompt }]
-      })
+      body: JSON.stringify({ prompt })
     });
 
-    if (!response.ok) throw new Error(`Error OpenRouter: ${response.status}`);
+    if (!response.ok) throw new Error(`Error Backend: ${response.status}`);
     
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || "No se pudo generar respuesta.";
+    return data.result || "No se pudo generar respuesta.";
     
   } catch (error) {
     console.error("Error AI:", error);
@@ -45,36 +45,20 @@ const callOpenRouter = async (prompt: string): Promise<string> => {
 
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
-    'Inscripto': 'bg-green-100 text-green-800 border-green-200',
-    'Documentación': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    'Solo Info': 'bg-gray-100 text-gray-800 border-gray-200',
-    'Deudor': 'bg-red-100 text-red-800 border-red-200',
+    'Inscripto': 'bg-green-500/10 text-green-400 border-green-500/20',
+    'Documentación': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    'Solo Info': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+    'Deudor': 'bg-red-500/10 text-red-400 border-red-500/20',
   };
   const activeStyle = styles[status] || styles['Solo Info'];
   return (
-    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${activeStyle}`}>
+    <span className={`px-3 py-1 rounded-full text-[11px] font-bold border tracking-wider uppercase ${activeStyle}`}>
       {status}
     </span>
   );
 };
 
-// Tipo para los headers que siempre será válido
-type AuthHeaders = Record<string, string>;
-
-const getAuthHeader = async (): Promise<AuthHeaders> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  
-  if (!token) {
-    console.warn("No hay sesión activa en Vintex");
-    return {}; // Headers vacíos (seguro para fetch)
-  }
-  
-  return { 'Authorization': `Bearer ${token}` };
-};
-
 export default function KennedyView() {
-  // Estados (sin cambios relevantes)
   const [students, setStudents] = useState<any[]>([]);
   const [careers, setCareers] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -100,7 +84,6 @@ export default function KennedyView() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingBotConfig, setIsGeneratingBotConfig] = useState({ welcome: false, away: false });
 
-  // Carga inicial
   useEffect(() => {
     fetchCareers();
     fetchBotConfig();
@@ -171,6 +154,7 @@ export default function KennedyView() {
         const uiStudent = {
           id: s.id,
           name: s.full_name,
+          legajo: s.legajo, 
           phone: s.contact_phone,
           location: s.location,
           status: s.status,
@@ -238,7 +222,7 @@ export default function KennedyView() {
     }
   };
 
-  // Manejo de modales y generadores IA (sin cambios, funcionan bien)
+  // Manejo de modales
   const handleOpenStudentModal = async (studentPreview: any) => {
     setGeneratedMessage('');
     setSelectedCareer(null);
@@ -264,13 +248,15 @@ export default function KennedyView() {
     }, 300);
   };
 
+  // IA - AHORA LLAMA AL BACKEND
   const generateStudentMessage = async () => {
     if (!selectedStudent) return;
     setIsGenerating(true);
     setGeneratedMessage('');
-    const prompt = `Actúa como secretario de 'Punto Kennedy'. Mensaje WhatsApp para ${selectedStudent.name}. Carrera: ${selectedStudent.career}. Estado: ${selectedStudent.status}. Deuda: ${selectedStudent.debt ? 'SI' : 'NO'}. Notas: "${selectedStudent.notes}". Docs: ${studentDocuments.length}. Objetivo: Informar situación. Sé breve y amable.`;
+    const prompt = `Actúa como secretario de 'Punto Kennedy'. Mensaje WhatsApp para ${selectedStudent.name}. Legajo: ${selectedStudent.legajo || 'S/D'}. Carrera: ${selectedStudent.career}. Estado: ${selectedStudent.status}. Deuda: ${selectedStudent.debt ? 'SI' : 'NO'}. Notas: "${selectedStudent.notes}". Docs: ${studentDocuments.length}. Objetivo: Informar situación. Sé breve y amable.`;
     
-    const result = await callOpenRouter(prompt);
+    // Usamos callBackendAI en lugar de llamar directo a OpenRouter
+    const result = await callBackendAI(prompt);
     setGeneratedMessage(result);
     setIsGenerating(false);
   };
@@ -279,7 +265,7 @@ export default function KennedyView() {
     setIsGeneratingBotConfig(prev => ({ ...prev, [type]: true }));
     const context = type === 'welcome' ? "bienvenida" : "ausencia";
     
-    const result = await callOpenRouter(`Genera un mensaje corto de ${context} para WhatsApp de un instituto educativo llamado Punto Kennedy. Tono joven y profesional.`);
+    const result = await callBackendAI(`Genera un mensaje corto de ${context} para WhatsApp de un instituto educativo llamado Punto Kennedy. Tono joven y profesional.`);
     
     if (type === 'welcome') setWelcomeText(result);
     else setAwayText(result);
@@ -292,249 +278,245 @@ export default function KennedyView() {
   );
 
   return (
-    <div className="space-y-6 p-1 min-h-screen pb-20">
-      {/* Menú de pestañas */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 p-1 min-h-screen pb-20 select-none">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">
-           <span className="text-blue-400">Kennedy</span>
+          <h2 className="text-4xl font-black text-white tracking-tighter italic">
+            <span className="text-blue-500">KENNEDY</span><span className="text-slate-500 text-2xl not-italic ml-1">SYSTEM</span>
           </h2>
-          <p className="text-gray-400 text-sm">Gestión académica y automatización</p>
+          <p className="text-slate-400 text-xs font-medium uppercase tracking-[0.2em] mt-1">Gestión académica • Automatización IA</p>
         </div>
         
-        <div className="flex bg-slate-800/50 p-1 rounded-lg border border-slate-700">
-          <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
-            <Users size={16} className="inline mr-2"/> Alumnos
-          </button>
-          <button onClick={() => setActiveTab('careers')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'careers' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
-            <BookOpen size={16} className="inline mr-2"/> Carreras
-          </button>
-          <button onClick={() => setActiveTab('bot')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'bot' ? 'bg-purple-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
-            <MessageCircle size={16} className="inline mr-2"/> Bot WhatsApp
-          </button>
+        <div className="flex bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-slate-700/50 shadow-2xl">
+          {['dashboard', 'careers', 'bot'].map((tab) => (
+            <button 
+              key={tab}
+              onClick={() => setActiveTab(tab)} 
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all duration-300 ${activeTab === tab ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] scale-105' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              {tab === 'dashboard' && <Users size={14}/>}
+              {tab === 'careers' && <BookOpen size={14}/>}
+              {tab === 'bot' && <MessageCircle size={14}/>}
+              <span className="uppercase tracking-widest">{tab === 'dashboard' ? 'Alumnos' : tab === 'careers' ? 'Carreras' : 'Bot AI'}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Contenido según pestaña */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Búsqueda y filtros */}
-          <GlassCard className="p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative flex-1 w-full md:max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
+          {/* BARRA DE HERRAMIENTAS */}
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between relative z-30">
+            <div className="relative flex-1 w-full md:max-w-xl group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input 
                 type="text" 
-                placeholder="Buscar alumno por nombre o DNI..." 
-                className="w-full pl-10 pr-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Buscar por nombre, DNI o Legajo..." 
+                className="w-full pl-12 pr-4 py-3 bg-slate-900/40 border border-slate-700/50 rounded-2xl text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-sm"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             
-            <div className="flex gap-2 relative w-full md:w-auto" ref={filterMenuRef}>
+            <div className="flex gap-3 relative w-full md:w-auto" ref={filterMenuRef}>
               <button 
                 onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
-                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors w-full md:w-auto justify-center ${activeFilter ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'border-slate-700 text-gray-300 hover:bg-slate-800'}`}
+                className={`flex items-center justify-center gap-3 px-6 py-3 border rounded-2xl font-bold text-xs uppercase tracking-widest transition-all ${isFilterMenuOpen || activeFilter ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-900/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'}`}
               >
-                <Filter size={18} />
-                <span>{activeFilter ? careers.find(c => c.id === activeFilter)?.name.substring(0, 15) + '...' : 'Filtrar Carrera'}</span>
-                <ChevronDown size={14}/>
+                <Filter size={16} />
+                <span>{activeFilter ? careers.find(c => c.id === activeFilter)?.name.substring(0, 15) : 'Filtrar'}</span>
+                <ChevronDown size={14} className={`transition-transform duration-300 ${isFilterMenuOpen ? 'rotate-180' : ''}`}/>
               </button>
               
               {isFilterMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 max-h-80 overflow-y-auto">
-                  <button onClick={() => { setActiveFilter(null); setIsFilterMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-blue-400 hover:bg-slate-700">Ver Todas</button>
-                  {careers.map(career => (
-                    <button key={career.id} onClick={() => { setActiveFilter(career.id); setIsFilterMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 truncate">{career.name}</button>
-                  ))}
+                <div className="absolute top-full right-0 mt-3 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[100] overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-2 border-b border-slate-800 bg-slate-800/30">
+                    <button onClick={() => { setActiveFilter(null); setIsFilterMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors">Limpiar Filtros</button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                    {careers.map(career => (
+                      <button key={career.id} onClick={() => { setActiveFilter(career.id); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2.5 text-xs font-medium rounded-xl transition-all ${activeFilter === career.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>{career.name}</button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-          </GlassCard>
+          </div>
 
-          {/* Tabla de alumnos */}
-          <GlassCard className="overflow-hidden">
+          {/* TABLA */}
+          <GlassCard className="border-slate-800/50 shadow-2xl !overflow-visible">
             {loadingData ? (
-              <div className="p-12 flex justify-center text-blue-400"><Loader2 className="animate-spin" size={32} /></div>
+                <div className="p-20 flex flex-col items-center justify-center gap-4 text-blue-500"><Loader2 className="animate-spin" size={40} /><p className="text-xs font-black uppercase tracking-[0.3em] animate-pulse">Sincronizando Alumnos</p></div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-800/50 border-b border-slate-700">
-                    <tr>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase">Alumno</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase">Carrera</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase">Estado</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {students.length > 0 ? students.map((student) => (
-                      <tr key={student.id} onClick={() => handleOpenStudentModal(student)} className="group hover:bg-slate-800/50 cursor-pointer transition-colors">
-                        <td className="px-6 py-4 flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold mr-3">{student.full_name.charAt(0)}</div>
-                          <div>
-                            <div className="font-medium text-white">{student.full_name}</div>
-                            <div className="text-xs text-gray-500">{student.dni}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-300">{student.careers?.name || 'Sin Carrera'}</td>
-                        <td className="px-6 py-4 flex items-center gap-2">
-                          <StatusBadge status={student.status} />
-                          
-                        </td>
-                        <td className="px-6 py-4 text-blue-400 text-sm font-medium group-hover:text-blue-300">Ver Ficha <ChevronRight size={16} className="inline" /></td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-separate border-spacing-0">
+                    <thead>
+                      <tr className="bg-slate-900/50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th className="px-8 py-5 border-b border-slate-800">Alumno</th>
+                        <th className="px-6 py-5 border-b border-slate-800">Legajo</th>
+                        <th className="px-6 py-5 border-b border-slate-800">Carrera</th>
+                        <th className="px-6 py-5 border-b border-slate-800">Estado</th>
+                        <th className="px-8 py-5 border-b border-slate-800 text-right">Ficha</th>
                       </tr>
-                    )) : (
-                      <tr><td colSpan={4} className="p-12 text-center text-gray-500"><SearchX size={48} className="mx-auto mb-2 opacity-50" /><p>No se encontraron alumnos.</p></td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {students.length > 0 ? students.map((student) => (
+                        <tr key={student.id} onClick={() => handleOpenStudentModal(student)} className="group hover:bg-blue-600/[0.03] cursor-pointer transition-all duration-300">
+                          <td className="px-8 py-4">
+                            <div className="flex items-center gap-4">
+                              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-white font-black text-sm border border-slate-600 group-hover:border-blue-500/50 transition-colors shadow-lg">{student.full_name.charAt(0)}</div>
+                              <div>
+                                <div className="font-bold text-slate-100 group-hover:text-blue-400 transition-colors">{student.full_name}</div>
+                                <div className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">DNI {student.dni}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs font-mono font-bold text-cyan-400/80 bg-cyan-400/5 px-2 py-1 rounded-md border border-cyan-400/10">#{student.legajo || '00000'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-medium text-slate-400 max-w-[180px] truncate">{student.careers?.name || 'S/D'}</td>
+                          <td className="px-6 py-4"><StatusBadge status={student.status} /></td>
+                          <td className="px-8 py-4 text-right">
+                            <div className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-slate-800 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300 border border-slate-700"><ChevronRight size={18} /></div>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={5} className="p-20 text-center"><div className="flex flex-col items-center gap-3 opacity-20"><SearchX size={60} /><p className="text-xs font-black uppercase tracking-widest">Base de datos vacía</p></div></td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
             )}
           </GlassCard>
         </div>
       )}
 
-      {/* Vista Carreras (sin cambios) */}
+      {/* VISTA CARRERAS */}
       {activeTab === 'careers' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCareers.map((career) => (
-              <GlassCard key={career.id} className="p-0 overflow-hidden hover:border-blue-500/50 transition-colors group">
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400"><GraduationCap size={24} /></div>
-                    <span className="bg-slate-800 text-gray-300 text-xs px-2 py-1 rounded font-medium">{career.duration}</span>
-                  </div>
-                  <h3 className="font-bold text-white text-lg mb-2">{career.name}</h3>
-                  <p className="text-sm text-gray-400 mb-4 line-clamp-2">{career.modality}</p>
-                  <div className="flex items-center gap-4 text-xs text-gray-500 border-t border-slate-700 pt-4">
-                    <div className="flex items-center gap-1"><CreditCard size={14} /><span>{career.fees} cuotas</span></div>
-                    <div className="flex items-center gap-1"><BookOpen size={14} /><span>{career.subjects} materias</span></div>
-                  </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2">
+          {careers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map((career) => (
+            <GlassCard key={career.id} className="p-0 overflow-hidden hover:border-blue-500/50 transition-all hover:-translate-y-1 shadow-xl">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-500 border border-blue-500/20"><GraduationCap size={28} /></div>
+                  <span className="bg-slate-800/80 text-slate-300 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-tighter border border-slate-700">{career.duration}</span>
                 </div>
-                <button onClick={() => handleOpenCareerModal(career)} className="w-full py-3 bg-slate-800/50 text-blue-400 text-sm font-semibold hover:bg-slate-800 transition-colors border-t border-slate-700">Ver Detalles</button>
-              </GlassCard>
-            ))}
-          </div>
+                <h3 className="font-black text-white text-lg mb-2 leading-tight group-hover:text-blue-400 transition-colors uppercase">{career.name}</h3>
+                <p className="text-xs text-slate-500 mb-6 line-clamp-2 leading-relaxed">{career.modality}</p>
+                <div className="flex items-center gap-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-t border-slate-800 pt-5">
+                  <div className="flex items-center gap-2"><CreditCard size={14} className="text-blue-500"/><span>{career.fees} Cuotas</span></div>
+                  <div className="flex items-center gap-2"><BookOpen size={14} className="text-blue-500"/><span>{career.subjects} Materias</span></div>
+                </div>
+              </div>
+              <button onClick={() => handleOpenCareerModal(career)} className="w-full py-4 bg-slate-800/30 text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all border-t border-slate-800">Ver Plan de Estudios</button>
+            </GlassCard>
+          ))}
         </div>
       )}
 
-      {/* Vista Bot (sin cambios) */}
+      {/* VISTA BOT CONFIG */}
       {activeTab === 'bot' && (
-        <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <GlassCard className="p-6 flex items-center justify-between">
-            <div><h2 className="text-lg font-bold text-white">Estado del Bot</h2><p className="text-sm text-gray-400">Activa o desactiva las respuestas automáticas.</p></div>
-            <div className="relative inline-block w-12 align-middle select-none">
-              <input type="checkbox" id="toggle" checked={botActive} onChange={() => setBotActive(!botActive)} className="absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-300" style={{ right: botActive ? '0' : 'auto', left: botActive ? 'auto' : '0' }} />
-              <label htmlFor="toggle" className={`block overflow-hidden h-6 rounded-full cursor-pointer transition-colors duration-300 ${botActive ? 'bg-green-500' : 'bg-gray-600'}`}></label>
+        <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2">
+          <GlassCard className="p-8 flex items-center justify-between border-slate-700/50 shadow-2xl">
+            <div><h2 className="text-xl font-black text-white uppercase tracking-tighter">Status Operativo</h2><p className="text-xs text-slate-500 uppercase tracking-widest mt-1">El asistente responderá automáticamente vía WhatsApp.</p></div>
+            <div className="relative inline-block w-14 align-middle select-none transition duration-200 ease-in">
+              <input type="checkbox" id="toggle" checked={botActive} onChange={() => setBotActive(!botActive)} className="hidden" />
+              <label htmlFor="toggle" className={`block overflow-hidden h-7 rounded-full cursor-pointer transition-colors duration-300 border border-slate-700 ${botActive ? 'bg-green-600' : 'bg-slate-800'}`}>
+                <span className={`block w-5 h-5 mt-1 ml-1 rounded-full bg-white transition-transform duration-300 ${botActive ? 'translate-x-7' : 'translate-x-0'} shadow-lg`}></span>
+              </label>
             </div>
           </GlassCard>
 
-          <GlassCard className="p-6 space-y-5">
-            <h3 className="font-semibold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><Sparkles size={18} className="text-purple-400" /> Configuración IA (Xiaomi Mimo)</h3>
+          <GlassCard className="p-8 space-y-8 border-slate-700/50 shadow-2xl">
+            <h3 className="font-black text-white border-b border-slate-800 pb-4 flex items-center gap-3 text-sm uppercase tracking-[0.2em]"><Sparkles size={20} className="text-purple-400" /> Entrenamiento del Asistente</h3>
             
-            {[
-              { label: "Mensaje de Bienvenida", val: welcomeText, set: setWelcomeText, key: 'welcome' },
-              { label: "Mensaje de Ausencia", val: awayText, set: setAwayText, key: 'away' }
-            ].map((item: any) => (
-              <div key={item.key}>
-                <div className="flex justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-300">{item.label}</label>
-                  <button 
-                    onClick={() => generateBotMessage(item.key)} 
-                    disabled={isGeneratingBotConfig[item.key as 'welcome' | 'away']} 
-                    className="text-xs text-purple-400 bg-purple-500/10 px-2 py-1 rounded flex items-center gap-1 hover:bg-purple-500/20"
-                  >
-                    {isGeneratingBotConfig[item.key as 'welcome' | 'away'] ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} Generar
+            {[{ label: "Mensaje de Bienvenida", val: welcomeText, set: setWelcomeText, key: 'welcome' }, { label: "Respuesta en Ausencia", val: awayText, set: setAwayText, key: 'away' }].map((item: any) => (
+              <div key={item.key} className="space-y-3">
+                <div className="flex justify-between items-end">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">{item.label}</label>
+                  <button onClick={() => generateBotMessage(item.key)} disabled={isGeneratingBotConfig[item.key as 'welcome' | 'away']} className="text-[9px] font-black uppercase tracking-widest text-purple-400 bg-purple-500/10 px-4 py-2 rounded-xl hover:bg-purple-500/20 transition-all flex items-center gap-2 border border-purple-500/20">
+                    {isGeneratingBotConfig[item.key as 'welcome' | 'away'] ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} Optimizar con IA
                   </button>
                 </div>
-                <textarea 
-                  className="w-full p-3 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:ring-1 focus:ring-purple-500 outline-none" 
-                  rows={3} 
-                  value={item.val} 
-                  onChange={(e) => item.set(e.target.value)} 
-                />
+                <textarea className="w-full p-4 bg-slate-950/50 border border-slate-800 rounded-2xl text-sm text-slate-300 focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 outline-none transition-all placeholder:text-slate-700 min-h-[100px]" value={item.val} onChange={(e) => item.set(e.target.value)} />
               </div>
             ))}
 
-            <div className="pt-2 text-right">
-              <button onClick={saveBotSettings} disabled={isSavingBot} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 flex items-center gap-2 ml-auto">
-                <Save size={16} />{isSavingBot ? 'Guardando...' : 'Guardar Cambios'}
-              </button>
+            <div className="pt-4 flex justify-end">
+              <button onClick={saveBotSettings} disabled={isSavingBot} className="px-10 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-500 text-[10px] font-black uppercase tracking-[0.3em] disabled:opacity-50 flex items-center gap-3 shadow-xl transition-all active:scale-95"><Save size={18} />{isSavingBot ? 'Sincronizando' : 'Guardar Entrenamiento'}</button>
             </div>
           </GlassCard>
         </div>
       )}
 
-      {/* Modal Slide Over */}
+      {/* MODAL SLIDE OVER */}
       {isModalVisible && (
-        <div className={`fixed inset-0 z-[100] flex justify-end transition-opacity duration-300 ${isModalOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-          <div onClick={handleCloseModal} className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"></div>
-          <div className={`relative w-full max-w-md bg-slate-900 border-l border-slate-800 h-full shadow-2xl p-6 overflow-y-auto transform transition-transform duration-300 ${isModalOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-            <button onClick={handleCloseModal} className="absolute top-4 right-4 text-gray-400 hover:text-white"><SearchX size={24} /></button>
+        <div className={`fixed inset-0 z-[100] flex justify-end transition-opacity duration-500 ${isModalOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          <div onClick={handleCloseModal} className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer transition-all"></div>
+          <div className={`relative w-full max-w-lg bg-slate-900 border-l border-slate-800 h-full shadow-[0_0_100px_rgba(0,0,0,0.8)] p-10 overflow-y-auto transform transition-transform duration-500 ease-out ${isModalOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <button onClick={handleCloseModal} className="absolute top-6 right-6 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-all"><SearchX size={24} /></button>
 
             {selectedStudent && !selectedCareer && (
-              <div className="animate-in fade-in duration-300">
-                {/* ... resto del contenido del modal de alumno sin cambios ... */}
-                <div className="mt-2 text-center">
-                  <div className="h-24 w-24 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-white text-3xl font-bold mb-4 border-2 border-slate-700">{selectedStudent.name.charAt(0)}</div>
-                  <h2 className="text-2xl font-bold text-white">{selectedStudent.name}</h2>
-                  <div className="flex justify-center gap-2 mt-2">
-                    <p className="text-blue-400 font-medium">{selectedStudent.career}</p>
-                    {selectedStudent.careerId && <button onClick={() => handleOpenCareerModal(careers.find(c => c.id === selectedStudent.careerId))} className="text-xs bg-slate-800 text-blue-400 px-2 py-1 rounded-full flex items-center gap-1 border border-slate-700"><Info size={12} /> Plan</button>}
+              <div className="animate-in fade-in duration-700 space-y-10">
+                <div className="text-center">
+                  <div className="h-28 w-28 mx-auto rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-4xl font-black mb-6 shadow-2xl border-4 border-slate-900 ring-1 ring-slate-800">{selectedStudent.name.charAt(0)}</div>
+                  <h2 className="text-3xl font-black text-white tracking-tighter uppercase">{selectedStudent.name}</h2>
+                  <div className="flex flex-col items-center gap-2 mt-3">
+                    <p className="text-blue-400 font-bold text-sm tracking-tight">{selectedStudent.career}</p>
+                    {selectedStudent.legajo && <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700 uppercase">Legajo Digital #{selectedStudent.legajo}</span>}
                   </div>
-                  <div className="mt-4 flex justify-center"><StatusBadge status={selectedStudent.status} /></div>
+                  <div className="mt-6 flex justify-center"><StatusBadge status={selectedStudent.status} /></div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mt-8 pb-6 border-b border-slate-800">
-                  <button className="flex items-center justify-center space-x-2 py-2.5 px-4 bg-green-600 text-white rounded-xl shadow hover:bg-green-700"><MessageCircle size={18} /><span>WhatsApp</span></button>
-                  <button className="flex items-center justify-center space-x-2 py-2.5 px-4 border border-slate-700 text-gray-300 rounded-xl hover:bg-slate-800"><FilePenLine size={18} /><span>Editar</span></button>
+                <div className="grid grid-cols-2 gap-4">
+                  <button className="flex items-center justify-center gap-3 py-4 bg-green-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-green-500 transition-all active:scale-95"><MessageCircle size={18} /><span>Abrir WhatsApp</span></button>
+                  <button className="flex items-center justify-center gap-3 py-4 border border-slate-700 text-slate-300 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all"><FilePenLine size={18} /><span>Editar Perfil</span></button>
                 </div>
 
-                <div className="mt-6 bg-purple-900/10 rounded-xl p-4 border border-purple-500/20">
-                  <h3 className="text-sm font-bold text-purple-300 flex items-center gap-2 mb-3"><Sparkles size={16} /> Redactor IA</h3>
-                  {!generatedMessage && !isGenerating && <button onClick={generateStudentMessage} className="w-full py-2 bg-slate-800 text-purple-400 border border-purple-500/30 rounded-lg text-sm font-medium flex justify-center gap-2 hover:bg-slate-700">Redactar mensaje</button>}
-                  {isGenerating && <div className="text-center py-4 text-purple-400 text-sm flex justify-center gap-2"><Loader2 size={18} className="animate-spin" /> Creando...</div>}
+                <div className="bg-purple-900/10 rounded-3xl p-6 border border-purple-500/20 shadow-inner">
+                  <h3 className="text-[10px] font-black text-purple-400 flex items-center gap-3 mb-4 uppercase tracking-[0.2em]"><Sparkles size={16} /> Redacción Sugerida</h3>
+                  {!generatedMessage && !isGenerating && <button onClick={generateStudentMessage} className="w-full py-3 bg-slate-800/80 text-purple-400 border border-purple-500/30 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Generar con IA</button>}
+                  {isGenerating && <div className="text-center py-6 text-purple-400 text-xs font-black uppercase tracking-widest animate-pulse">Analizando Legajo...</div>}
                   {generatedMessage && (
-                    <div>
-                      <textarea className="w-full text-sm p-3 rounded-lg bg-slate-900 border border-purple-500/30 text-gray-300 mb-2" rows={4} value={generatedMessage} onChange={(e) => setGeneratedMessage(e.target.value)} />
-                      <div className="flex justify-end"><button onClick={() => navigator.clipboard.writeText(generatedMessage)} className="text-xs text-purple-400 font-medium flex gap-1 hover:text-purple-300"><Copy size={12} /> Copiar</button></div>
+                    <div className="space-y-4">
+                      <textarea className="w-full text-sm p-5 rounded-2xl bg-slate-950/80 border border-purple-500/30 text-slate-300 min-h-[140px] outline-none" rows={5} value={generatedMessage} onChange={(e) => setGeneratedMessage(e.target.value)} />
+                      <div className="flex justify-end"><button onClick={() => navigator.clipboard.writeText(generatedMessage)} className="text-[10px] font-black uppercase tracking-widest text-purple-400 flex items-center gap-2 hover:text-purple-300 transition-colors"><Copy size={14} /> Copiar al portapapeles</button></div>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-6">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Legajo Digital</h3>
+                <div className="space-y-6">
+                  <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] pl-2 border-l-4 border-blue-600">Documentos del Alumno</h3>
                   {studentDocuments.length > 0 ? (
-                    <ul className="space-y-2">
+                    <ul className="space-y-3">
                       {studentDocuments.map((doc) => (
-                        <li key={doc.id} onClick={() => downloadDocument(doc.id, doc.file_name)} className="flex items-center justify-between text-sm text-gray-300 p-3 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-blue-500 cursor-pointer group transition-colors">
-                          <div className="flex items-center"><FileCheck size={16} className="text-green-500 mr-2" /> {doc.document_type}</div>
-                          <Download size={14} className="text-gray-500 group-hover:text-blue-400" />
+                        <li key={doc.id} onClick={() => downloadDocument(doc.id, doc.file_name)} className="flex items-center justify-between text-xs font-bold text-slate-300 p-4 bg-slate-800/40 border border-slate-700/50 rounded-2xl hover:border-blue-500 hover:bg-blue-600/10 cursor-pointer group transition-all duration-300">
+                          <div className="flex items-center gap-3"><FileCheck size={18} className="text-green-500" /> <span className="uppercase">{doc.document_type}</span></div>
+                          <Download size={16} className="text-slate-500 group-hover:text-blue-400 transition-colors" />
                         </li>
                       ))}
                     </ul>
-                  ) : <div className="text-sm text-gray-500 italic p-3 bg-slate-800/30 rounded text-center border border-slate-800">Carpeta vacía.</div>}
+                  ) : <div className="text-xs text-slate-600 font-black uppercase tracking-widest p-10 bg-slate-950/30 rounded-3xl text-center border border-slate-900 border-dashed">Carpeta de documentos vacía</div>}
                 </div>
               </div>
             )}
 
             {selectedCareer && (
-              <div className="animate-in fade-in duration-300">
-                <div className="mt-2 text-center pb-6 border-b border-slate-800">
-                  <div className="h-20 w-20 mx-auto rounded-full bg-blue-900/20 flex items-center justify-center text-blue-500 mb-4"><GraduationCap size={40} /></div>
-                  <h2 className="text-xl font-bold text-white leading-tight">{selectedCareer.name}</h2>
-                  <p className="text-gray-400 text-sm mt-2 font-medium bg-slate-800 inline-block px-3 py-1 rounded-full">{selectedCareer.duration}</p>
+              <div className="animate-in fade-in duration-700 space-y-8">
+                <div className="text-center pb-8 border-b border-slate-800">
+                  <div className="h-24 w-24 mx-auto rounded-[2rem] bg-blue-900/20 flex items-center justify-center text-blue-500 mb-6 border border-blue-500/20 shadow-inner"><GraduationCap size={48} /></div>
+                  <h2 className="text-2xl font-black text-white uppercase tracking-tighter leading-tight">{selectedCareer.name}</h2>
+                  <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-3 bg-slate-800 px-4 py-1.5 rounded-full inline-block border border-slate-700">{selectedCareer.duration}</p>
                 </div>
-                <div className="mt-6 space-y-6">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-800 p-3 rounded-lg text-center"><p className="text-xs text-blue-400 font-bold uppercase">Cuotas</p><p className="font-bold text-white">{selectedCareer.fees}</p></div>
-                    <div className="bg-slate-800 p-3 rounded-lg text-center"><p className="text-xs text-blue-400 font-bold uppercase">Materias</p><p className="font-bold text-white">{selectedCareer.subjects}</p></div>
+                <div className="space-y-8">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-800/50 p-5 rounded-3xl border border-slate-700/50 text-center"><p className="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-1">Inversión</p><p className="font-black text-white text-lg">{selectedCareer.fees} <span className="text-[10px] text-slate-500">CUOTAS</span></p></div>
+                    <div className="bg-slate-800/50 p-5 rounded-3xl border border-slate-700/50 text-center"><p className="text-[9px] text-blue-400 font-black uppercase tracking-widest mb-1">Estructura</p><p className="font-black text-white text-lg">{selectedCareer.subjects} <span className="text-[10px] text-slate-500">MATERIAS</span></p></div>
                   </div>
-                  <div className="space-y-4 text-gray-300">
-                    <div className="border-b border-slate-800 pb-3"><p className="text-xs text-gray-500 font-bold uppercase mb-1">Modalidad</p><p className="text-sm">{selectedCareer.modality}</p></div>
-                    <div className="border-b border-slate-800 pb-3"><p className="text-xs text-gray-500 font-bold uppercase mb-1">Evaluaciones</p><p className="text-sm">{selectedCareer.evaluations_format}</p></div>
+                  <div className="space-y-6 text-slate-300">
+                    <div className="bg-slate-950/40 p-6 rounded-3xl border border-slate-800/50"><p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.2em] mb-3">Modalidad de Cursado</p><p className="text-sm font-bold text-slate-300">{selectedCareer.modality}</p></div>
+                    <div className="bg-slate-950/40 p-6 rounded-3xl border border-slate-800/50"><p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.2em] mb-3">Esquema de Evaluación</p><p className="text-sm font-bold text-slate-300">{selectedCareer.evaluations_format}</p></div>
                   </div>
                 </div>
               </div>
