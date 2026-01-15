@@ -93,7 +93,7 @@ export default function MetricsView() {
     <div className="space-y-8 p-1">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-3xl font-bold text-white tracking-tight">
-          Panel General <span className="text-purple-400">Vintex</span>
+          Panel General <span className="text-purple-400">Clinica</span>
         </h2>
         <span className="text-xs text-gray-500 bg-gray-800 px-3 py-1 rounded-full border border-gray-700">
           En vivo
