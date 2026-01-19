@@ -4,13 +4,14 @@ import {
   Save, FileCheck, Download, 
   Sparkles, Loader2, BookOpen, GraduationCap, 
   CreditCard, SearchX, ChevronRight, MapPin, 
-  Phone, AlignLeft, History, X, User, Bot
+  Phone, AlignLeft, History, X, User, Bot,
+  AlertCircle, CheckCircle
 } from 'lucide-react';
-// Asegúrate de que este componente exista en tu proyecto, o cámbialo por un div con estilos
+// Asegúrate de que este componente exista en tu proyecto
 import { GlassCard } from '@/components/ui/GlassCard'; 
 import { supabase } from '@/lib/supabaseClient';
 
-// --- TIPOS E INTERFACES (Para mayor robustez) ---
+// --- TIPOS E INTERFACES ---
 interface Career {
   id: number;
   name: string;
@@ -33,6 +34,9 @@ interface Student {
   general_notes: string;
   career_id: number;
   careers?: { name: string };
+  // Nuevos campos para lógica de Bot/Secretaría
+  secretaria?: boolean;
+  bot_students?: boolean;
 }
 
 interface SelectedStudentUI {
@@ -46,6 +50,8 @@ interface SelectedStudentUI {
   notes: string;
   career: string;
   careerId: number;
+  secretaria?: boolean;
+  bot_students?: boolean;
 }
 
 interface ChatMessage {
@@ -65,11 +71,7 @@ const getAuthHeader = async (): Promise<Record<string, string>> => {
 const callBackendAI = async (payload: any): Promise<string> => {
   try {
     const headers = await getAuthHeader();
-    
-    // Si es array, es chat completo (messages). Si es string, es prompt simple.
-    const body = Array.isArray(payload) 
-      ? { messages: payload } 
-      : { prompt: payload };
+    const body = Array.isArray(payload) ? { messages: payload } : { prompt: payload };
     
     const response = await fetch(`${API_URL}/ai/generate`, {
       method: "POST",
@@ -92,7 +94,7 @@ const callBackendAI = async (payload: any): Promise<string> => {
   }
 };
 
-// --- COMPONENTE BADGE (Optimizado) ---
+// --- COMPONENTE BADGE ---
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
     'Inscripto': 'bg-green-500/10 text-green-400 border-green-500/20',
@@ -109,18 +111,17 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-// --- PARSER DE HISTORIAL (Limpieza de JSON de n8n) ---
+// --- PARSER DE HISTORIAL ---
 const parseChatHistory = (rows: any[]) => {
     if (!rows || rows.length === 0) return "No hay historial disponible.";
 
     return rows.map((row) => {
-        const msg = row.message; // Columna JSONB
+        const msg = row.message;
         if (!msg) return null;
 
         const role = msg.type === 'human' ? '👤 ALUMNO' : '🤖 BOT';
         let content = msg.content || '';
 
-        // Limpieza específica para mensajes que vienen de n8n/WhatsApp
         if (msg.type === 'human' && content.includes("Mensaje del paciente en texto:")) {
             const parts = content.split("Mensaje del paciente en texto:");
             if (parts.length > 1) {
@@ -128,10 +129,7 @@ const parseChatHistory = (rows: any[]) => {
             }
         }
 
-        // Ignorar mensajes de error del sistema
-        if (msg.type === 'ai' && content.includes("Agent stopped")) {
-            return null;
-        }
+        if (msg.type === 'ai' && content.includes("Agent stopped")) return null;
 
         return `[${role}]: ${content}`;
     })
@@ -141,48 +139,49 @@ const parseChatHistory = (rows: any[]) => {
 
 // --- COMPONENTE PRINCIPAL ---
 export default function KennedyView() {
-  // --- ESTADOS GENERALES ---
+  // Estados Generales
   const [students, setStudents] = useState<Student[]>([]);
   const [careers, setCareers] = useState<Career[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // --- BOT CONFIG ---
+  // Bot Config
   const [botActive, setBotActive] = useState(true);
   const [welcomeText, setWelcomeText] = useState("");
   const [awayText, setAwayText] = useState("");
   const [isSavingBot, setIsSavingBot] = useState(false);
   const [isGeneratingBotConfig, setIsGeneratingBotConfig] = useState({ welcome: false, away: false });
 
-  // --- FILTROS ---
+  // Filtros
   const [activeFilter, setActiveFilter] = useState<number | null>(null);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
 
-  // --- FICHA ALUMNO ---
+  // Ficha Alumno
   const [selectedStudent, setSelectedStudent] = useState<SelectedStudentUI | null>(null);
   const [studentDocuments, setStudentDocuments] = useState<any[]>([]);
   const [notesBuffer, setNotesBuffer] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isResolving, setIsResolving] = useState(false); // Estado para el botón "Resolver"
 
-  // --- ESTADOS PARA EL HISTORIAL VISUAL ---
+  // Historial Visual
   const [showHistory, setShowHistory] = useState(false); 
   const [historyData, setHistoryData] = useState<any[]>([]); 
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // --- MODALES ---
+  // Modales
   const [selectedCareer, setSelectedCareer] = useState<Career | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false); 
 
-  // --- IA ANALISTA ---
+  // IA Analista
   const [analysisChat, setAnalysisChat] = useState<ChatMessage[]>([]);
   const [analysisInput, setAnalysisInput] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const chatContextRef = useRef<ChatMessage[]>([]); // Memoria del contexto original
+  const chatContextRef = useRef<ChatMessage[]>([]); 
 
-  // --- EFFECTS ---
+  // --- EFECTOS ---
   useEffect(() => {
     fetchCareers();
     fetchBotConfig();
@@ -192,6 +191,35 @@ export default function KennedyView() {
     const delayDebounceFn = setTimeout(() => { fetchStudents(); }, 500);
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, activeFilter]);
+
+  // --- REALTIME (Sincronización Automática) ---
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-students')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
+        // Al insertar
+        if (payload.eventType === 'INSERT') {
+            setStudents(prev => [payload.new as Student, ...prev]);
+        } 
+        // Al actualizar
+        else if (payload.eventType === 'UPDATE') {
+            const updatedStudent = payload.new as Student;
+            setStudents(prev => prev.map(s => s.id === updatedStudent.id ? { ...s, ...updatedStudent } : s));
+            
+            // Si el alumno actualizado es el que estamos viendo en el modal, actualizamos su estado local
+            if (selectedStudent && selectedStudent.id === updatedStudent.id) {
+                setSelectedStudent(prev => prev ? ({ 
+                    ...prev, 
+                    secretaria: updatedStudent.secretaria,
+                    bot_students: updatedStudent.bot_students
+                }) : null);
+            }
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedStudent]);
 
   // --- API CALLS ---
   const fetchCareers = async () => {
@@ -247,15 +275,16 @@ export default function KennedyView() {
           debt: s.has_debt,
           notes: s.general_notes,
           career: s.careers?.name || 'Sin Carrera',
-          careerId: s.career_id
+          careerId: s.career_id,
+          secretaria: s.secretaria,
+          bot_students: s.bot_students
         };
         setSelectedStudent(uiStudent);
         setNotesBuffer(uiStudent.notes || '');
         setStudentDocuments(data.documents || []);
         
-        // Resetear estados al abrir un nuevo alumno
         setAnalysisChat([]); 
-        setShowHistory(false); // Empezar siempre colapsado
+        setShowHistory(false);
       }
     } catch (err) { console.error(err); }
   };
@@ -263,7 +292,6 @@ export default function KennedyView() {
   // --- ACTION HANDLERS ---
 
   const toggleHistoryView = async () => {
-    // Si vamos a abrir el historial (showHistory es false), cargamos los datos
     if (!showHistory && selectedStudent?.phone) {
         setLoadingHistory(true);
         try {
@@ -280,6 +308,30 @@ export default function KennedyView() {
         }
     }
     setShowHistory(!showHistory);
+  };
+
+  // Resolver Situación (Bot ON, Secretaria OFF)
+  const handleResolveSituation = async () => {
+      if (!selectedStudent) return;
+      setIsResolving(true);
+      try {
+          const headers = await getAuthHeader();
+          const res = await fetch(`${API_URL}/students/${selectedStudent.id}/resolve`, {
+              method: 'PATCH',
+              headers: { ...headers }
+          });
+          if (res.ok) {
+              // Actualización optimista (el Realtime confirmará después)
+              setSelectedStudent(prev => prev ? ({ ...prev, secretaria: false, bot_students: true }) : null);
+          } else {
+              alert("Error al resolver situación.");
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Error de conexión");
+      } finally {
+          setIsResolving(false);
+      }
   };
 
   const toggleBotStatus = async () => {
@@ -339,14 +391,13 @@ export default function KennedyView() {
     } catch (err) { alert("Error en descarga"); }
   };
 
-  // --- LOGICA IA ANALISTA ---
+  // --- LOGICA IA ---
   const startAnalysis = async () => {
     if (!selectedStudent) return;
     setIsAnalyzing(true);
     
     try {
         const headers = await getAuthHeader();
-        // 1. Obtener historial para dárselo a la IA
         const res = await fetch(`${API_URL}/chat-history/${selectedStudent.phone}`, { headers });
         let chatContextText = "";
 
@@ -357,20 +408,26 @@ export default function KennedyView() {
             chatContextText = "(Sin historial previo)";
         }
 
-        // 2. Crear contexto del sistema
+        // Contexto inteligente: Si hay alerta, pedimos síntesis del problema.
+        const systemPrompt = selectedStudent.secretaria 
+            ? `El alumno solicitó hablar con secretaria. Resume la conversación y explica qué necesita urgentemente.`
+            : `Eres un experto analista académico. Misión: analizar la conversación y perfil del alumno.`;
+
         const initialContext: ChatMessage[] = [
             { 
                 role: "system", 
-                content: `Eres un experto analista académico. Misión: analizar la conversación y perfil del alumno.
+                content: `${systemPrompt}
                 DATOS: Nombre: ${selectedStudent.name} | Carrera: ${selectedStudent.career} | Estado: ${selectedStudent.status}
-                HISTORIAL CHAT: ${chatContextText}
-                Instrucciones: Responde brevemente. Identifica objeciones o interés de compra.` 
+                HISTORIAL CHAT: ${chatContextText}` 
             }
         ];
 
         chatContextRef.current = initialContext;
 
-        const firstMsg: ChatMessage = { role: "user", content: "Analiza el perfil y dime la probabilidad de inscripción/pago." };
+        const firstMsg: ChatMessage = { 
+            role: "user", 
+            content: selectedStudent.secretaria ? "Sintetiza el caso urgente." : "Analiza el perfil y dime la probabilidad de inscripción/pago." 
+        };
         setAnalysisChat([firstMsg]); 
 
         const response = await callBackendAI([...initialContext, firstMsg]);
@@ -422,7 +479,7 @@ export default function KennedyView() {
     setTimeout(() => { 
         setIsModalVisible(false); 
         setSelectedStudent(null); 
-        setShowHistory(false); // Resetear historial al cerrar
+        setShowHistory(false); 
     }, 300);
   };
 
@@ -459,7 +516,6 @@ export default function KennedyView() {
       {activeTab === 'dashboard' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
           
-          {/* BARRA DE BÚSQUEDA Y FILTROS */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between relative z-30">
             <div className="relative flex-1 w-full md:max-w-xl group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
@@ -478,7 +534,6 @@ export default function KennedyView() {
             </div>
           </div>
 
-          {/* TABLA ALUMNOS */}
           <GlassCard className="border-slate-800/50 shadow-2xl !overflow-visible">
             {loadingData ? (
                 <div className="p-20 flex flex-col items-center justify-center gap-4 text-blue-500"><Loader2 className="animate-spin" size={40} /><p className="text-xs font-black uppercase tracking-[0.3em] animate-pulse">Sincronizando Alumnos</p></div>
@@ -496,10 +551,14 @@ export default function KennedyView() {
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {students.length > 0 ? students.map((student) => (
-                        <tr key={student.id} onClick={() => handleOpenStudentModal(student)} className="group hover:bg-blue-600/[0.03] cursor-pointer transition-all duration-300">
+                        <tr key={student.id} onClick={() => handleOpenStudentModal(student)} className={`group cursor-pointer transition-all duration-300 ${student.secretaria ? 'bg-red-500/5 hover:bg-red-500/10 border-l-2 border-l-red-500' : 'hover:bg-blue-600/[0.03]'}`}>
                           <td className="px-8 py-4">
                             <div className="flex items-center gap-4">
-                              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-white font-black text-sm border border-slate-600 group-hover:border-blue-500/50 transition-colors shadow-lg">{student.full_name.charAt(0)}</div>
+                              <div className="relative">
+                                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-white font-black text-sm border border-slate-600 group-hover:border-blue-500/50 transition-colors shadow-lg">{student.full_name.charAt(0)}</div>
+                                  {student.secretaria && <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-ping"></div>}
+                                  {student.secretaria && <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full border border-black"></div>}
+                              </div>
                               <div>
                                 <div className="font-bold text-slate-100 group-hover:text-blue-400 transition-colors">{student.full_name}</div>
                                 <div className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">DNI {student.dni}</div>
@@ -508,7 +567,10 @@ export default function KennedyView() {
                           </td>
                           <td className="px-6 py-4"><span className="text-xs font-mono font-bold text-cyan-400/80 bg-cyan-400/5 px-2 py-1 rounded-md border border-cyan-400/10">#{student.legajo || '00000'}</span></td>
                           <td className="px-6 py-4 text-xs font-medium text-slate-400 max-w-[180px] truncate">{student.careers?.name || 'S/D'}</td>
-                          <td className="px-6 py-4"><StatusBadge status={student.status} /></td>
+                          <td className="px-6 py-4 flex items-center gap-2">
+                              <StatusBadge status={student.status} />
+                              {student.secretaria && <span className="text-[9px] font-black bg-red-500 text-white px-2 py-0.5 rounded uppercase tracking-wider">Ayuda</span>}
+                          </td>
                           <td className="px-8 py-4 text-right"><div className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-slate-800 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300 border border-slate-700"><ChevronRight size={18} /></div></td>
                         </tr>
                       )) : (
@@ -522,7 +584,7 @@ export default function KennedyView() {
         </div>
       )}
 
-      {/* CAREERS TAB */}
+      {/* VISTAS CARRERAS Y BOT */}
       {activeTab === 'careers' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2">
            {filteredCareers.map((career) => (
@@ -545,7 +607,6 @@ export default function KennedyView() {
         </div>
       )}
 
-      {/* BOT TAB */}
       {activeTab === 'bot' && (
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2">
           <GlassCard className="p-8 flex items-center justify-between border-slate-700/50 shadow-2xl">
@@ -570,16 +631,13 @@ export default function KennedyView() {
         <div className={`fixed inset-0 z-[100] flex justify-end transition-opacity duration-500 ${isModalOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           <div onClick={handleCloseModal} className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer transition-all"></div>
           
-          {/* CONTENEDOR PRINCIPAL: Se redimensiona según showHistory */}
           <div className={`relative bg-slate-900 border-l border-slate-800 h-full shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden transform transition-all duration-500 ease-out flex ${isModalOpen ? 'translate-x-0' : 'translate-x-full'} ${showHistory ? 'w-full max-w-6xl' : 'w-full max-w-lg'}`}>
             
-            {/* Botón Cerrar */}
             <button onClick={handleCloseModal} className="absolute top-6 right-6 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-all z-50"><X size={24} /></button>
 
             {/* --- PANEL IZQUIERDO: HISTORIAL (Solo visible si showHistory = true) --- */}
             {showHistory && (
                   <div className="h-full w-2/3 flex flex-col bg-slate-950/50 border-r border-slate-800 animate-in fade-in slide-in-from-right-10 duration-500">
-                      {/* Header Historial */}
                       <div className="p-6 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm z-10 flex justify-between items-center">
                           <div>
                               <h3 className="text-lg font-black text-white tracking-tight flex items-center gap-3"><MessageCircle className="text-green-500"/> Historial de Chat</h3>
@@ -588,7 +646,6 @@ export default function KennedyView() {
                           <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest bg-slate-900 px-3 py-1 rounded-full border border-slate-800">{historyData.length} Mensajes</div>
                       </div>
                       
-                      {/* Lista Mensajes */}
                       <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-950">
                           {loadingHistory ? (
                               <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 opacity-50"><Loader2 size={40} className="animate-spin text-blue-500"/><p className="text-xs font-black uppercase tracking-[0.2em]">Recuperando Logs...</p></div>
@@ -601,7 +658,6 @@ export default function KennedyView() {
                                   
                                   const isHuman = msg.type === 'human';
                                   let content = msg.content || '';
-                                  // Limpieza visual extra
                                   if (isHuman && content.includes("Mensaje del paciente en texto:")) content = content.split("Mensaje del paciente en texto:")[1].split("Mensaje del paciente en transcripción")[0].trim();
                                   if (msg.type === 'ai' && content.includes("Agent stopped")) return null;
 
@@ -629,13 +685,40 @@ export default function KennedyView() {
                 {/* CABECERA PERFIL */}
                 <div className="text-center">
                   <div className="h-28 w-28 mx-auto rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-4xl font-black mb-6 shadow-2xl border-4 border-slate-900 ring-1 ring-slate-800">{selectedStudent.name.charAt(0)}</div>
-                  <h2 className="text-3xl font-black text-white tracking-tighter uppercase">{selectedStudent.name}</h2>
+                  
+                  {/* ALERTA DE SECRETARÍA */}
+                  {selectedStudent.secretaria && (
+                      <div className="mt-4 bg-red-500/10 border border-red-500/50 p-4 rounded-2xl flex flex-col items-center gap-2 animate-pulse">
+                          <div className="flex items-center gap-2 text-red-400 font-black uppercase tracking-widest text-xs">
+                              <AlertCircle size={16} /> Requiere Asistencia
+                          </div>
+                          <p className="text-xs text-red-200 text-center">El alumno solicitó hablar con un humano.</p>
+                      </div>
+                  )}
+
+                  <h2 className="text-3xl font-black text-white tracking-tighter uppercase mt-4">{selectedStudent.name}</h2>
                   <div className="flex flex-col items-center gap-2 mt-3">
                     <p className="text-blue-400 font-bold text-sm tracking-tight">{selectedStudent.career}</p>
                     {selectedStudent.legajo && <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700 uppercase">Legajo #{selectedStudent.legajo}</span>}
                   </div>
                   <div className="mt-6 flex justify-center"><StatusBadge status={selectedStudent.status} /></div>
                 </div>
+
+                {/* BOTÓN SITUACIÓN RESUELTA / BOT ACTIVO */}
+                {selectedStudent.secretaria ? (
+                    <button 
+                        onClick={handleResolveSituation}
+                        disabled={isResolving}
+                        className="w-full py-4 bg-green-600 hover:bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all active:scale-95 flex items-center justify-center gap-3"
+                    >
+                        {isResolving ? <Loader2 className="animate-spin" /> : <CheckCircle size={20} />}
+                        Situación Resuelta
+                    </button>
+                ) : (
+                    <div className="w-full py-3 bg-slate-800/50 text-slate-500 rounded-2xl font-bold text-[10px] uppercase tracking-widest text-center border border-slate-800 flex items-center justify-center gap-2">
+                        <Bot size={14} className="text-green-500"/> Bot Activo - Monitoreando
+                    </div>
+                )}
 
                 {/* CONTACTO */}
                 <div className={`grid ${showHistory ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
@@ -649,9 +732,9 @@ export default function KennedyView() {
                     </div>
                 </div>
 
-                {/* ACCIONES (WhatsApp y Toggle Historial) */}
+                {/* ACCIONES */}
                 <div className={`grid ${showHistory ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
-                  <button className="flex items-center justify-center gap-3 py-4 bg-green-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-green-500 transition-all active:scale-95"><MessageCircle size={18} /><span>WhatsApp</span></button>
+                  <button className="flex items-center justify-center gap-3 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-500 transition-all"><MessageCircle size={18} /><span>WhatsApp</span></button>
                   <button 
                     onClick={toggleHistoryView}
                     className={`flex items-center justify-center gap-3 py-4 border rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${showHistory ? 'bg-blue-600 text-white border-blue-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}
@@ -673,25 +756,27 @@ export default function KennedyView() {
                 <div className="bg-slate-950/80 rounded-3xl p-6 border border-blue-500/20 shadow-lg relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles size={100} className="text-blue-500"/></div>
                     <h3 className="text-[10px] font-black text-blue-400 flex items-center gap-3 mb-4 uppercase tracking-[0.2em] relative z-10"><Sparkles size={16} /> Analista Académico IA</h3>
+                    
+                    {analysisChat.length === 0 && (
+                        <div className="text-center py-8 text-slate-600">
+                            {selectedStudent.secretaria && <p className="text-xs text-red-300 mb-2 font-bold animate-pulse">¡Recomendado: Generar síntesis!</p>}
+                            <p className="text-xs mb-4 font-medium">Analiza el historial para detectar interés.</p>
+                            <button onClick={startAnalysis} disabled={isAnalyzing} className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg flex items-center justify-center gap-2 mx-auto">
+                                {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Search size={14}/>} {selectedStudent.secretaria ? 'Sintetizar Caso' : 'Iniciar Análisis'}
+                            </button>
+                        </div>
+                    )}
+
                     <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar relative z-10">
-                        {analysisChat.length === 0 ? (
-                            <div className="text-center py-8 text-slate-600">
-                                <p className="text-xs mb-4 font-medium">Analiza el historial para detectar interés.</p>
-                                <button onClick={startAnalysis} disabled={isAnalyzing} className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg flex items-center justify-center gap-2 mx-auto">
-                                    {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Search size={14}/>} Iniciar Análisis
-                                </button>
-                            </div>
-                        ) : (
-                            analysisChat.map((msg, idx) => (
-                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[85%] p-3 rounded-2xl text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-300 rounded-bl-none border border-slate-700'}`}>
-                                        {msg.content}
-                                    </div>
+                        {analysisChat.map((msg, idx) => (
+                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-300 rounded-bl-none border border-slate-700'}`}>
+                                    {msg.content}
                                 </div>
-                            ))
-                        )}
-                        {isAnalyzing && analysisChat.length > 0 && (<div className="flex justify-start"><div className="bg-slate-800 p-3 rounded-2xl rounded-bl-none border border-slate-700"><Loader2 size={14} className="animate-spin text-blue-400"/></div></div>)}
+                            </div>
+                        ))}
                     </div>
+                    
                     {analysisChat.length > 0 && (
                         <div className="flex gap-2 relative z-10">
                             <input type="text" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-blue-500 transition-colors" placeholder="Haz una pregunta..." value={analysisInput} onChange={(e) => setAnalysisInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendAnalysisMessage()} />
@@ -717,7 +802,7 @@ export default function KennedyView() {
               </div>
             )}
 
-            {/* DETALLE CARRERA (En Modal) */}
+            {/* DETALLE CARRERA */}
             {selectedCareer && (
               <div className="p-10 w-full animate-in fade-in duration-700 space-y-8 overflow-y-auto">
                 <div className="text-center pb-8 border-b border-slate-800">
@@ -739,8 +824,9 @@ export default function KennedyView() {
             )}
           </div>
         </div>
-      
+      </div> 
+      )}
+
     </div>
-      )}</div>
   );
 }
