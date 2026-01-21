@@ -5,11 +5,14 @@ import {
   Sparkles, Loader2, BookOpen, GraduationCap, 
   CreditCard, SearchX, ChevronRight, MapPin, 
   Phone, AlignLeft, History, X, User, Bot,
-  AlertCircle, CheckCircle
+  AlertCircle, CheckCircle, Edit3, ListFilter // Nuevo icono
 } from 'lucide-react';
-// Asegúrate de que este componente exista en tu proyecto
 import { GlassCard } from '@/components/ui/GlassCard'; 
 import { supabase } from '@/lib/supabaseClient';
+
+// --- CONSTANTES DEL SISTEMA ---
+const SEDES = ['Catamarca', 'Pilar', 'Santiago del Estero', 'San Nicolás'];
+const ESTADOS = ['Sólo preguntó', 'En Proceso', 'Reconocimiento', 'Documentación', 'Inscripto', 'Alumno Regular', 'Deudor'];
 
 // --- TIPOS E INTERFACES ---
 interface Career {
@@ -34,7 +37,6 @@ interface Student {
   general_notes: string;
   career_id: number;
   careers?: { name: string };
-  // Nuevos campos para lógica de Bot/Secretaría
   secretaria?: boolean;
   bot_students?: boolean;
 }
@@ -42,6 +44,7 @@ interface Student {
 interface SelectedStudentUI {
   id: number;
   name: string;
+  dni: string;
   legajo: string;
   phone: string;
   location: string;
@@ -81,7 +84,6 @@ const callBackendAI = async (payload: any): Promise<string> => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error("❌ Error Detallado:", errorData); 
       throw new Error(errorData.error || `Error Backend: ${response.status}`);
     }
     
@@ -98,6 +100,9 @@ const callBackendAI = async (payload: any): Promise<string> => {
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
     'Inscripto': 'bg-green-500/10 text-green-400 border-green-500/20',
+    'Alumno Regular': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', 
+    'En Proceso': 'bg-blue-500/10 text-blue-400 border-blue-500/20', 
+    'Reconocimiento': 'bg-purple-500/10 text-purple-400 border-purple-500/20', 
     'Documentación': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
     'Solo Info': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
     'Deudor': 'bg-red-500/10 text-red-400 border-red-500/20',
@@ -123,10 +128,7 @@ const parseChatHistory = (rows: any[]) => {
         let content = msg.content || '';
 
         if (msg.type === 'human' && content.includes("Mensaje del paciente en texto:")) {
-            const parts = content.split("Mensaje del paciente en texto:");
-            if (parts.length > 1) {
-                content = parts[1].split("Mensaje del paciente en transcripción")[0].trim();
-            }
+            content = content.split("Mensaje del paciente en texto:")[1].split("Mensaje del paciente en transcripción")[0].trim();
         }
 
         if (msg.type === 'ai' && content.includes("Agent stopped")) return null;
@@ -153,17 +155,26 @@ export default function KennedyView() {
   const [isSavingBot, setIsSavingBot] = useState(false);
   const [isGeneratingBotConfig, setIsGeneratingBotConfig] = useState({ welcome: false, away: false });
 
-  // Filtros
-  const [activeFilter, setActiveFilter] = useState<number | null>(null);
+  // --- FILTROS ---
+  const [activeFilter, setActiveFilter] = useState<number | null>(null); // Carrera
+  const [activeStatusFilter, setActiveStatusFilter] = useState<string | null>(null); // Estado (NUEVO)
+  
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false); // Menu Estado (NUEVO)
+  
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  const statusMenuRef = useRef<HTMLDivElement>(null); // Ref Estado (NUEVO)
 
   // Ficha Alumno
   const [selectedStudent, setSelectedStudent] = useState<SelectedStudentUI | null>(null);
   const [studentDocuments, setStudentDocuments] = useState<any[]>([]);
   const [notesBuffer, setNotesBuffer] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
-  const [isResolving, setIsResolving] = useState(false); // Estado para el botón "Resolver"
+  const [isResolving, setIsResolving] = useState(false);
+
+  // Estados Edición
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<SelectedStudentUI>>({});
 
   // Historial Visual
   const [showHistory, setShowHistory] = useState(false); 
@@ -180,46 +191,54 @@ export default function KennedyView() {
   const [analysisInput, setAnalysisInput] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const chatContextRef = useRef<ChatMessage[]>([]); 
+  
+  const selectedStudentIdRef = useRef<number | null>(null);
 
   // --- EFECTOS ---
   useEffect(() => {
-    fetchCareers();
-    fetchBotConfig();
+    const handleClickOutside = (event: MouseEvent) => {
+        if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+            setIsFilterMenuOpen(false);
+        }
+        if (statusMenuRef.current && !statusMenuRef.current.contains(event.target as Node)) {
+            setIsStatusMenuOpen(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => { selectedStudentIdRef.current = selectedStudent?.id || null; }, [selectedStudent]);
+  useEffect(() => { fetchCareers(); fetchBotConfig(); }, []);
+  
+  // Recargar cuando cambian los filtros
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => { fetchStudents(); }, 500);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, activeFilter]);
+  }, [searchTerm, activeFilter, activeStatusFilter]); // Agregado activeStatusFilter
 
-  // --- REALTIME (Sincronización Automática) ---
+  // --- REALTIME OPTIMIZADO ---
   useEffect(() => {
-    const channel = supabase
-      .channel('realtime-students')
+    const channel = supabase.channel('realtime-students')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
-        // Al insertar
         if (payload.eventType === 'INSERT') {
             setStudents(prev => [payload.new as Student, ...prev]);
         } 
-        // Al actualizar
         else if (payload.eventType === 'UPDATE') {
             const updatedStudent = payload.new as Student;
             setStudents(prev => prev.map(s => s.id === updatedStudent.id ? { ...s, ...updatedStudent } : s));
             
-            // Si el alumno actualizado es el que estamos viendo en el modal, actualizamos su estado local
-            if (selectedStudent && selectedStudent.id === updatedStudent.id) {
-                setSelectedStudent(prev => prev ? ({ 
-                    ...prev, 
-                    secretaria: updatedStudent.secretaria,
-                    bot_students: updatedStudent.bot_students
-                }) : null);
+            if (selectedStudentIdRef.current === updatedStudent.id) {
+                if (!isEditingProfile) {
+                    fetchStudentDetails(updatedStudent.id);
+                }
             }
         }
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [selectedStudent]);
+  }, [isEditingProfile]);
 
   // --- API CALLS ---
   const fetchCareers = async () => {
@@ -248,8 +267,11 @@ export default function KennedyView() {
     try {
       const headers = await getAuthHeader();
       let url = `${API_URL}/students?search=${encodeURIComponent(searchTerm)}`;
-      if (activeFilter) url += `&career_id=${activeFilter}`;
       
+      // Filtros aplicados
+      if (activeFilter) url += `&career_id=${activeFilter}`;
+      if (activeStatusFilter) url += `&status=${encodeURIComponent(activeStatusFilter)}`; // Nuevo filtro estado
+
       const res = await fetch(url, { headers });
       if (res.ok) {
         const result = await res.json();
@@ -268,6 +290,7 @@ export default function KennedyView() {
         const uiStudent: SelectedStudentUI = {
           id: s.id,
           name: s.full_name,
+          dni: s.dni,
           legajo: s.legajo,
           phone: s.contact_phone,
           location: s.location,
@@ -283,14 +306,58 @@ export default function KennedyView() {
         setNotesBuffer(uiStudent.notes || '');
         setStudentDocuments(data.documents || []);
         
-        setAnalysisChat([]); 
-        setShowHistory(false);
+        if (!isEditingProfile) {
+            setAnalysisChat([]); 
+            setShowHistory(false);
+        }
       }
     } catch (err) { console.error(err); }
   };
 
-  // --- ACTION HANDLERS ---
+  // --- LÓGICA DE EDICIÓN MANUAL ---
+  const handleEditClick = () => {
+      if (!selectedStudent) return;
+      setEditForm({
+          name: selectedStudent.name,
+          dni: selectedStudent.dni,
+          legajo: selectedStudent.legajo,
+          location: selectedStudent.location,
+          status: selectedStudent.status,
+          careerId: selectedStudent.careerId
+      });
+      setIsEditingProfile(true);
+  };
 
+  const handleSaveProfile = async () => {
+      if (!selectedStudent) return;
+      try {
+          const headers = await getAuthHeader();
+          const res = await fetch(`${API_URL}/students/${selectedStudent.id}/update-profile`, {
+              method: 'PATCH',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  full_name: editForm.name,
+                  dni: editForm.dni,
+                  legajo: editForm.legajo,
+                  career_id: editForm.careerId,
+                  location: editForm.location,
+                  status: editForm.status
+              })
+          });
+
+          if (res.ok) {
+              setIsEditingProfile(false);
+              await fetchStudentDetails(selectedStudent.id);
+              alert("Perfil actualizado correctamente");
+          } else {
+              alert("Error al actualizar perfil");
+          }
+      } catch (e) {
+          alert("Error de conexión");
+      }
+  };
+
+  // --- ACTION HANDLERS ---
   const toggleHistoryView = async () => {
     if (!showHistory && selectedStudent?.phone) {
         setLoadingHistory(true);
@@ -301,16 +368,11 @@ export default function KennedyView() {
                 const data = await res.json();
                 setHistoryData(data);
             }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoadingHistory(false);
-        }
+        } catch (err) { console.error(err); } finally { setLoadingHistory(false); }
     }
     setShowHistory(!showHistory);
   };
 
-  // Resolver Situación (Bot ON, Secretaria OFF)
   const handleResolveSituation = async () => {
       if (!selectedStudent) return;
       setIsResolving(true);
@@ -321,17 +383,9 @@ export default function KennedyView() {
               headers: { ...headers }
           });
           if (res.ok) {
-              // Actualización optimista (el Realtime confirmará después)
               setSelectedStudent(prev => prev ? ({ ...prev, secretaria: false, bot_students: true }) : null);
-          } else {
-              alert("Error al resolver situación.");
-          }
-      } catch (err) {
-          console.error(err);
-          alert("Error de conexión");
-      } finally {
-          setIsResolving(false);
-      }
+          } else { alert("Error al resolver."); }
+      } catch (err) { alert("Error de conexión"); } finally { setIsResolving(false); }
   };
 
   const toggleBotStatus = async () => {
@@ -344,9 +398,7 @@ export default function KennedyView() {
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: newStatus, welcome_message: welcomeText, away_message: awayText })
       });
-    } catch (err) {
-      setBotActive(!newStatus); alert("Error de conexión");
-    }
+    } catch (err) { setBotActive(!newStatus); alert("Error"); }
   };
 
   const saveBotSettings = async () => {
@@ -358,7 +410,7 @@ export default function KennedyView() {
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: botActive, welcome_message: welcomeText, away_message: awayText })
       });
-      alert("Configuración guardada");
+      alert("Guardado");
     } catch (err) { alert("Error"); } finally { setIsSavingBot(false); }
   };
 
@@ -395,65 +447,28 @@ export default function KennedyView() {
   const startAnalysis = async () => {
     if (!selectedStudent) return;
     setIsAnalyzing(true);
-    
     try {
         const headers = await getAuthHeader();
         const res = await fetch(`${API_URL}/chat-history/${selectedStudent.phone}`, { headers });
-        let chatContextText = "";
-
-        if (res.ok) {
-            const rawHistory = await res.json();
-            chatContextText = parseChatHistory(rawHistory);
-        } else {
-            chatContextText = "(Sin historial previo)";
-        }
-
-        // Contexto inteligente: Si hay alerta, pedimos síntesis del problema.
+        let chatContextText = res.ok ? parseChatForAI(await res.json()) : "(Sin historial)";
         const systemPrompt = selectedStudent.secretaria 
             ? `El alumno solicitó hablar con secretaria. Resume la conversación y explica qué necesita urgentemente.`
             : `Eres un experto analista académico. Misión: analizar la conversación y perfil del alumno.`;
-
-        const initialContext: ChatMessage[] = [
-            { 
-                role: "system", 
-                content: `${systemPrompt}
-                DATOS: Nombre: ${selectedStudent.name} | Carrera: ${selectedStudent.career} | Estado: ${selectedStudent.status}
-                HISTORIAL CHAT: ${chatContextText}` 
-            }
-        ];
-
+        const initialContext = [{ role: "system" as const, content: `${systemPrompt} DATOS: Nombre: ${selectedStudent.name} | Carrera: ${selectedStudent.career} | Estado: ${selectedStudent.status} HISTORIAL CHAT: ${chatContextText}` }];
         chatContextRef.current = initialContext;
-
-        const firstMsg: ChatMessage = { 
-            role: "user", 
-            content: selectedStudent.secretaria ? "Sintetiza el caso urgente." : "Analiza el perfil y dime la probabilidad de inscripción/pago." 
-        };
+        const firstMsg = { role: "user" as const, content: selectedStudent.secretaria ? "Sintetiza el caso urgente." : "Analiza el perfil y dime la probabilidad de inscripción/pago." };
         setAnalysisChat([firstMsg]); 
-
         const response = await callBackendAI([...initialContext, firstMsg]);
         setAnalysisChat(prev => [...prev, { role: "assistant", content: response }]);
-
-    } catch (err) {
-        console.error(err);
-        setAnalysisChat([{ role: "assistant", content: "Error conectando con el historial." }]);
-    } finally {
-        setIsAnalyzing(false);
-    }
+    } catch (err) { setAnalysisChat([{ role: "assistant", content: "Error." }]); } finally { setIsAnalyzing(false); }
   };
 
   const sendAnalysisMessage = async () => {
     if (!analysisInput.trim()) return;
-    
-    const newUserMsg: ChatMessage = { role: "user", content: analysisInput };
+    const newUserMsg = { role: "user" as const, content: analysisInput };
     const newVisualChat = [...analysisChat, newUserMsg];
-    
-    setAnalysisChat(newVisualChat); 
-    setAnalysisInput("");
-    setIsAnalyzing(true);
-
-    const fullPayload = [...chatContextRef.current, ...newVisualChat];
-
-    const response = await callBackendAI(fullPayload);
+    setAnalysisChat(newVisualChat); setAnalysisInput(""); setIsAnalyzing(true);
+    const response = await callBackendAI([...chatContextRef.current, ...newVisualChat]);
     setAnalysisChat(prev => [...prev, { role: "assistant", content: response }]);
     setIsAnalyzing(false);
   };
@@ -466,29 +481,32 @@ export default function KennedyView() {
   };
 
   // --- RENDER UI ---
-
-  const handleOpenStudentModal = async (studentPreview: Student) => {
-    setSelectedCareer(null);
-    setIsModalVisible(true); 
-    setTimeout(() => setIsModalOpen(true), 10);
-    await fetchStudentDetails(studentPreview.id);
+  const handleOpenStudentModal = async (studentPreview: Student) => { 
+      setSelectedCareer(null); 
+      setIsEditingProfile(false); 
+      setIsModalVisible(true); 
+      setTimeout(() => setIsModalOpen(true), 10); 
+      await fetchStudentDetails(studentPreview.id); 
   };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setTimeout(() => { 
-        setIsModalVisible(false); 
-        setSelectedStudent(null); 
-        setShowHistory(false); 
-    }, 300);
+  
+  const handleCloseModal = () => { 
+      setIsModalOpen(false); 
+      setTimeout(() => { 
+          setIsModalVisible(false); 
+          setSelectedStudent(null); 
+          setSelectedCareer(null); 
+          setShowHistory(false); 
+          setIsEditingProfile(false); 
+      }, 300); 
   };
-
+  
   const handleOpenCareerModal = (c: Career) => { 
+      setSelectedStudent(null); 
       setSelectedCareer(c); 
       setIsModalVisible(true); 
       setTimeout(() => setIsModalOpen(true), 10); 
   };
-
+  
   const filteredCareers = careers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
@@ -521,16 +539,40 @@ export default function KennedyView() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input type="text" placeholder="Buscar por nombre, DNI o Legajo..." className="w-full pl-12 pr-4 py-3 bg-slate-900/40 border border-slate-700/50 rounded-2xl text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-600 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <div className="flex gap-3 relative w-full md:w-auto" ref={filterMenuRef}>
-              <button onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)} className={`flex items-center justify-center gap-3 px-6 py-3 border rounded-2xl font-bold text-xs uppercase tracking-widest transition-all ${isFilterMenuOpen || activeFilter ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-900/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'}`}>
-                <Filter size={16} /> <span>{activeFilter ? careers.find(c => c.id === activeFilter)?.name.substring(0, 15) : 'Filtrar'}</span> <ChevronDown size={14} className={`transition-transform duration-300 ${isFilterMenuOpen ? 'rotate-180' : ''}`}/>
-              </button>
-              {isFilterMenuOpen && (
-                <div className="absolute top-full right-0 mt-3 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-[100] overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
-                  <div className="p-2 border-b border-slate-800 bg-slate-800/30"><button onClick={() => { setActiveFilter(null); setIsFilterMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors">Limpiar Filtros</button></div>
-                  <div className="max-h-64 overflow-y-auto p-2 space-y-1">{careers.map(career => (<button key={career.id} onClick={() => { setActiveFilter(career.id); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2.5 text-xs font-medium rounded-xl transition-all ${activeFilter === career.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>{career.name}</button>))}</div>
-                </div>
-              )}
+            
+            {/* AREA DE FILTROS */}
+            <div className="flex gap-3 relative w-full md:w-auto">
+              
+              {/* FILTRO ESTADO */}
+              <div className="relative" ref={statusMenuRef}>
+                <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)} className={`flex items-center justify-center gap-3 px-6 py-3 border rounded-2xl font-bold text-xs uppercase tracking-widest transition-all ${isStatusMenuOpen || activeStatusFilter ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-900/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'}`}>
+                    <ListFilter size={16} /> <span>{activeStatusFilter ? activeStatusFilter : 'Estado'}</span> <ChevronDown size={14} className={`transition-transform duration-300 ${isStatusMenuOpen ? 'rotate-180' : ''}`}/>
+                </button>
+                {isStatusMenuOpen && (
+                    <div className="absolute top-full right-0 mt-3 w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-[100] overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-2 border-b border-slate-800 bg-slate-800/30"><button onClick={() => { setActiveStatusFilter(null); setIsStatusMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors">Todos</button></div>
+                        <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                            {ESTADOS.map(st => (<button key={st} onClick={() => { setActiveStatusFilter(st); setIsStatusMenuOpen(false); }} className={`w-full text-left px-4 py-2.5 text-xs font-medium rounded-xl transition-all ${activeStatusFilter === st ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>{st}</button>))}
+                        </div>
+                    </div>
+                )}
+              </div>
+
+              {/* FILTRO CARRERA */}
+              <div className="relative" ref={filterMenuRef}>
+                <button onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)} className={`flex items-center justify-center gap-3 px-6 py-3 border rounded-2xl font-bold text-xs uppercase tracking-widest transition-all ${isFilterMenuOpen || activeFilter ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-900/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'}`}>
+                    <Filter size={16} /> <span>{activeFilter ? careers.find(c => c.id === activeFilter)?.name.substring(0, 10) : 'Carrera'}</span> <ChevronDown size={14} className={`transition-transform duration-300 ${isFilterMenuOpen ? 'rotate-180' : ''}`}/>
+                </button>
+                {isFilterMenuOpen && (
+                    <div className="absolute top-full right-0 mt-3 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-[100] overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-2 border-b border-slate-800 bg-slate-800/30"><button onClick={() => { setActiveFilter(null); setIsFilterMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors">Todas</button></div>
+                        <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                            {careers.map(career => (<button key={career.id} onClick={() => { setActiveFilter(career.id); setIsFilterMenuOpen(false); }} className={`w-full text-left px-4 py-2.5 text-xs font-medium rounded-xl transition-all ${activeFilter === career.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>{career.name}</button>))}
+                        </div>
+                    </div>
+                )}
+              </div>
+
             </div>
           </div>
 
@@ -631,6 +673,7 @@ export default function KennedyView() {
         <div className={`fixed inset-0 z-[100] flex justify-end transition-opacity duration-500 ${isModalOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           <div onClick={handleCloseModal} className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer transition-all"></div>
           
+          {/* CONTENEDOR PRINCIPAL: Se redimensiona según showHistory */}
           <div className={`relative bg-slate-900 border-l border-slate-800 h-full shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden transform transition-all duration-500 ease-out flex ${isModalOpen ? 'translate-x-0' : 'translate-x-full'} ${showHistory ? 'w-full max-w-6xl' : 'w-full max-w-lg'}`}>
             
             <button onClick={handleCloseModal} className="absolute top-6 right-6 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-all z-50"><X size={24} /></button>
@@ -677,132 +720,131 @@ export default function KennedyView() {
                   </div>
             )}
 
-            {/* --- PANEL DERECHO: FICHA ALUMNO (Siempre visible) --- */}
+            {/* --- PANEL DERECHO: FICHA ALUMNO / DETALLE CARRERA (Siempre visible) --- */}
             <div className={`h-full overflow-y-auto custom-scrollbar p-10 flex-shrink-0 transition-all duration-500 ${showHistory ? 'w-1/3 bg-slate-900' : 'w-full'}`}>
             
+            {/* VISTA DETALLE ALUMNO */}
             {selectedStudent && !selectedCareer && (
               <div className="animate-in fade-in duration-700 space-y-8">
-                {/* CABECERA PERFIL */}
-                <div className="text-center">
-                  <div className="h-28 w-28 mx-auto rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-4xl font-black mb-6 shadow-2xl border-4 border-slate-900 ring-1 ring-slate-800">{selectedStudent.name.charAt(0)}</div>
-                  
-                  {/* ALERTA DE SECRETARÍA */}
-                  {selectedStudent.secretaria && (
-                      <div className="mt-4 bg-red-500/10 border border-red-500/50 p-4 rounded-2xl flex flex-col items-center gap-2 animate-pulse">
-                          <div className="flex items-center gap-2 text-red-400 font-black uppercase tracking-widest text-xs">
-                              <AlertCircle size={16} /> Requiere Asistencia
-                          </div>
-                          <p className="text-xs text-red-200 text-center">El alumno solicitó hablar con un humano.</p>
-                      </div>
-                  )}
+                
+                {/* --- MODO EDICIÓN --- */}
+                {isEditingProfile ? (
+                    <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700 space-y-4">
+                        <h3 className="text-white font-bold flex items-center gap-2"><Edit3 size={18}/> Editar Perfil</h3>
+                        
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase text-slate-500 font-bold">Nombre Completo</label>
+                            <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-[10px] uppercase text-slate-500 font-bold">DNI</label>
+                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={editForm.dni} onChange={e => setEditForm({...editForm, dni: e.target.value})} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] uppercase text-slate-500 font-bold">Legajo</label>
+                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={editForm.legajo || ''} onChange={e => setEditForm({...editForm, legajo: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase text-slate-500 font-bold">Carrera</label>
+                            <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={editForm.careerId} onChange={e => setEditForm({...editForm, careerId: Number(e.target.value)})}>
+                                {careers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase text-slate-500 font-bold">Sede</label>
+                            <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={editForm.location} onChange={e => setEditForm({...editForm, location: e.target.value})}>
+                                {SEDES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase text-slate-500 font-bold">Estado</label>
+                            <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
+                                {ESTADOS.map(st => <option key={st} value={st}>{st}</option>)}
+                            </select>
+                        </div>
 
-                  <h2 className="text-3xl font-black text-white tracking-tighter uppercase mt-4">{selectedStudent.name}</h2>
-                  <div className="flex flex-col items-center gap-2 mt-3">
-                    <p className="text-blue-400 font-bold text-sm tracking-tight">{selectedStudent.career}</p>
-                    {selectedStudent.legajo && <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700 uppercase">Legajo #{selectedStudent.legajo}</span>}
-                  </div>
-                  <div className="mt-6 flex justify-center"><StatusBadge status={selectedStudent.status} /></div>
-                </div>
-
-                {/* BOTÓN SITUACIÓN RESUELTA / BOT ACTIVO */}
-                {selectedStudent.secretaria ? (
-                    <button 
-                        onClick={handleResolveSituation}
-                        disabled={isResolving}
-                        className="w-full py-4 bg-green-600 hover:bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all active:scale-95 flex items-center justify-center gap-3"
-                    >
-                        {isResolving ? <Loader2 className="animate-spin" /> : <CheckCircle size={20} />}
-                        Situación Resuelta
-                    </button>
+                        <div className="flex gap-2 pt-2">
+                            <button onClick={() => setIsEditingProfile(false)} className="flex-1 py-2 bg-slate-700 text-white rounded-xl text-xs font-bold hover:bg-slate-600">Cancelar</button>
+                            <button onClick={handleSaveProfile} className="flex-1 py-2 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-500">Guardar Cambios</button>
+                        </div>
+                    </div>
                 ) : (
-                    <div className="w-full py-3 bg-slate-800/50 text-slate-500 rounded-2xl font-bold text-[10px] uppercase tracking-widest text-center border border-slate-800 flex items-center justify-center gap-2">
-                        <Bot size={14} className="text-green-500"/> Bot Activo - Monitoreando
+                    // --- VISTA NORMAL ---
+                    <div className="text-center relative group-header">
+                        {/* Botón Editar Flotante - MOVIDO A LA IZQUIERDA (left-0) */}
+                        <button onClick={handleEditClick} className="absolute top-0 left-0 p-2 bg-slate-800 text-slate-400 rounded-full hover:bg-blue-600 hover:text-white transition-all" title="Editar Perfil Manualmente">
+                            <Edit3 size={16} />
+                        </button>
+
+                        <div className="h-28 w-28 mx-auto rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-4xl font-black mb-6 shadow-2xl border-4 border-slate-900 ring-1 ring-slate-800">{selectedStudent.name.charAt(0)}</div>
+                        {selectedStudent.secretaria && (<div className="mt-4 bg-red-500/10 border border-red-500/50 p-4 rounded-2xl flex flex-col items-center gap-2 animate-pulse"><div className="flex items-center gap-2 text-red-400 font-black uppercase tracking-widest text-xs"><AlertCircle size={16} /> Requiere Asistencia</div><p className="text-xs text-red-200 text-center">El alumno solicitó hablar con un humano.</p></div>)}
+                        
+                        <h2 className="text-3xl font-black text-white tracking-tighter uppercase mt-4">{selectedStudent.name}</h2>
+                        
+                        <div className="flex flex-col items-center gap-2 mt-3">
+                            <p className="text-blue-400 font-bold text-sm tracking-tight">{selectedStudent.career}</p>
+                            {selectedStudent.legajo && <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700 uppercase">Legajo #{selectedStudent.legajo}</span>}
+                        </div>
+                        <div className="mt-6 flex justify-center"><StatusBadge status={selectedStudent.status} /></div>
                     </div>
                 )}
 
-                {/* CONTACTO */}
-                <div className={`grid ${showHistory ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
-                    <div className="bg-slate-800/50 p-3 rounded-2xl border border-slate-700/50 flex items-center gap-3">
-                        <div className="p-2 bg-slate-700/50 rounded-xl text-blue-400"><Phone size={16} /></div>
-                        <div className="overflow-hidden"><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Teléfono</p><p className="text-sm font-bold text-slate-200 truncate">{selectedStudent.phone || 'S/D'}</p></div>
-                    </div>
-                    <div className="bg-slate-800/50 p-3 rounded-2xl border border-slate-700/50 flex items-center gap-3">
-                        <div className="p-2 bg-slate-700/50 rounded-xl text-red-400"><MapPin size={16} /></div>
-                        <div className="overflow-hidden"><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Ubicación</p><p className="text-sm font-bold text-slate-200 truncate">{selectedStudent.location || 'S/D'}</p></div>
-                    </div>
-                </div>
+                {/* OCULTAR ACCIONES SI ESTAMOS EDITANDO */}
+                {!isEditingProfile && (
+                    <>
+                        {selectedStudent.secretaria ? (
+                            <button onClick={handleResolveSituation} disabled={isResolving} className="w-full py-4 bg-green-600 hover:bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all active:scale-95 flex items-center justify-center gap-3">{isResolving ? <Loader2 className="animate-spin" /> : <CheckCircle size={20} />} Situación Resuelta</button>
+                        ) : (<div className="w-full py-3 bg-slate-800/50 text-slate-500 rounded-2xl font-bold text-[10px] uppercase tracking-widest text-center border border-slate-800 flex items-center justify-center gap-2"><Bot size={14} className="text-green-500"/> Bot Activo - Monitoreando</div>)}
 
-                {/* ACCIONES */}
-                <div className={`grid ${showHistory ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
-                  <button className="flex items-center justify-center gap-3 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-500 transition-all"><MessageCircle size={18} /><span>WhatsApp</span></button>
-                  <button 
-                    onClick={toggleHistoryView}
-                    className={`flex items-center justify-center gap-3 py-4 border rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${showHistory ? 'bg-blue-600 text-white border-blue-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}
-                  >
-                      <History size={18} /><span>{showHistory ? 'Ocultar Chat' : 'Ver Historial'}</span>
-                  </button>
-                </div>
-
-                {/* NOTAS */}
-                <div className="bg-slate-950/50 rounded-3xl p-6 border border-slate-800 shadow-inner group focus-within:border-blue-500/50 transition-colors">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-[10px] font-black text-slate-500 flex items-center gap-3 uppercase tracking-[0.2em]"><AlignLeft size={16} className="text-blue-500"/> Notas Internas</h3>
-                        <button onClick={saveNotes} disabled={isSavingNotes || notesBuffer === selectedStudent.notes} className="text-[10px] font-bold text-blue-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed">{isSavingNotes ? 'Guardando...' : 'Guardar'}</button>
-                    </div>
-                    <textarea className="w-full bg-transparent text-sm text-slate-300 border-none outline-none resize-none placeholder:text-slate-700 min-h-[100px]" placeholder="Escribe notas..." value={notesBuffer} onChange={(e) => setNotesBuffer(e.target.value)} />
-                </div>
-
-                {/* CHAT ANALISTA IA */}
-                <div className="bg-slate-950/80 rounded-3xl p-6 border border-blue-500/20 shadow-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles size={100} className="text-blue-500"/></div>
-                    <h3 className="text-[10px] font-black text-blue-400 flex items-center gap-3 mb-4 uppercase tracking-[0.2em] relative z-10"><Sparkles size={16} /> Analista Académico IA</h3>
-                    
-                    {analysisChat.length === 0 && (
-                        <div className="text-center py-8 text-slate-600">
-                            {selectedStudent.secretaria && <p className="text-xs text-red-300 mb-2 font-bold animate-pulse">¡Recomendado: Generar síntesis!</p>}
-                            <p className="text-xs mb-4 font-medium">Analiza el historial para detectar interés.</p>
-                            <button onClick={startAnalysis} disabled={isAnalyzing} className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg flex items-center justify-center gap-2 mx-auto">
-                                {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Search size={14}/>} {selectedStudent.secretaria ? 'Sintetizar Caso' : 'Iniciar Análisis'}
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar relative z-10">
-                        {analysisChat.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-300 rounded-bl-none border border-slate-700'}`}>
-                                    {msg.content}
-                                </div>
+                        <div className={`grid ${showHistory ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+                            <div className="bg-slate-800/50 p-3 rounded-2xl border border-slate-700/50 flex items-center gap-3">
+                                <div className="p-2 bg-slate-700/50 rounded-xl text-blue-400"><Phone size={16} /></div>
+                                <div className="overflow-hidden"><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Teléfono</p><p className="text-sm font-bold text-slate-200 truncate">{selectedStudent.phone || 'S/D'}</p></div>
                             </div>
-                        ))}
-                    </div>
-                    
-                    {analysisChat.length > 0 && (
-                        <div className="flex gap-2 relative z-10">
-                            <input type="text" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-blue-500 transition-colors" placeholder="Haz una pregunta..." value={analysisInput} onChange={(e) => setAnalysisInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendAnalysisMessage()} />
-                            <button onClick={sendAnalysisMessage} disabled={isAnalyzing} className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-500 transition-colors shadow-lg disabled:opacity-50"><ChevronRight size={16} /></button>
+                            <div className="bg-slate-800/50 p-3 rounded-2xl border border-slate-700/50 flex items-center gap-3">
+                                <div className="p-2 bg-slate-700/50 rounded-xl text-red-400"><MapPin size={16} /></div>
+                                <div className="overflow-hidden"><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Ubicación</p><p className="text-sm font-bold text-slate-200 truncate">{selectedStudent.location || 'S/D'}</p></div>
+                            </div>
                         </div>
-                    )}
-                </div>
 
-                {/* DOCUMENTOS */}
-                <div className="space-y-6">
-                  <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] pl-2 border-l-4 border-blue-600">Legajo Digital</h3>
-                  {studentDocuments.length > 0 ? (
-                    <ul className="space-y-3">
-                      {studentDocuments.map((doc) => (
-                        <li key={doc.id} onClick={() => downloadDocument(doc.id, doc.file_name)} className="flex items-center justify-between text-xs font-bold text-slate-300 p-4 bg-slate-800/40 border border-slate-700/50 rounded-2xl hover:border-blue-500 hover:bg-blue-600/10 cursor-pointer group transition-all duration-300">
-                          <div className="flex items-center gap-3"><FileCheck size={18} className="text-green-500" /> <span className="uppercase">{doc.document_type}</span></div>
-                          <Download size={16} className="text-slate-500 group-hover:text-blue-400 transition-colors" />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <div className="text-xs text-slate-600 font-black uppercase tracking-widest p-10 bg-slate-950/30 rounded-3xl text-center border border-slate-900 border-dashed">Carpeta vacía</div>}
-                </div>
+                        <div className={`grid ${showHistory ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
+                            <button className="flex items-center justify-center gap-3 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-500 transition-all"><MessageCircle size={18} /><span>WhatsApp</span></button>
+                            <button onClick={toggleHistoryView} className={`flex items-center justify-center gap-3 py-4 border rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${showHistory ? 'bg-blue-600 text-white border-blue-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}><History size={18} /><span>{showHistory ? 'Ocultar Chat' : 'Ver Historial'}</span></button>
+                        </div>
+
+                        <div className="bg-slate-950/50 rounded-3xl p-6 border border-slate-800 shadow-inner group focus-within:border-blue-500/50 transition-colors">
+                            <div className="flex justify-between items-center mb-4"><h3 className="text-[10px] font-black text-slate-500 flex items-center gap-3 uppercase tracking-[0.2em]"><AlignLeft size={16} className="text-blue-500"/> Notas Internas</h3><button onClick={saveNotes} disabled={isSavingNotes || notesBuffer === selectedStudent.notes} className="text-[10px] font-bold text-blue-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed">{isSavingNotes ? 'Guardando...' : 'Guardar'}</button></div>
+                            <textarea className="w-full bg-transparent text-sm text-slate-300 border-none outline-none resize-none placeholder:text-slate-700 min-h-[100px]" placeholder="Escribe notas..." value={notesBuffer} onChange={(e) => setNotesBuffer(e.target.value)} />
+                        </div>
+
+                        <div className="bg-purple-900/10 rounded-3xl p-6 border border-purple-500/20 shadow-lg relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles size={100} className="text-blue-500"/></div>
+                            <h3 className="text-[10px] font-black text-blue-400 flex items-center gap-3 mb-4 uppercase tracking-[0.2em] relative z-10"><Sparkles size={16} /> Analista Académico IA</h3>
+                            {analysisChat.length === 0 && (<div className="text-center py-4"><button onClick={startAnalysis} disabled={isAnalyzing} className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg flex items-center justify-center gap-2 mx-auto">{isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : <Search size={14}/>} {selectedStudent.secretaria ? 'Sintetizar Caso' : 'Iniciar Análisis'}</button></div>)}
+                            <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar relative z-10">{analysisChat.map((msg, idx) => (<div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-3 rounded-2xl text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-300 rounded-bl-none border border-slate-700'}`}>{msg.content}</div></div>))}</div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] pl-2 border-l-4 border-blue-600">Legajo Digital</h3>
+                            {studentDocuments.length > 0 ? (
+                                <ul className="space-y-3">
+                                {studentDocuments.map((doc) => (
+                                    <li key={doc.id} onClick={() => downloadDocument(doc.id, doc.file_name)} className="flex items-center justify-between text-xs font-bold text-slate-300 p-4 bg-slate-800/40 border border-slate-700/50 rounded-2xl hover:border-blue-500 hover:bg-blue-600/10 cursor-pointer group transition-all duration-300">
+                                    <div className="flex items-center gap-3"><FileCheck size={18} className="text-green-500" /> <span className="uppercase">{doc.document_type}</span></div>
+                                    <Download size={16} className="text-slate-500 group-hover:text-blue-400 transition-colors" />
+                                    </li>
+                                ))}
+                                </ul>
+                            ) : <div className="text-xs text-slate-600 font-black uppercase tracking-widest p-10 bg-slate-950/30 rounded-3xl text-center border border-slate-900 border-dashed">Carpeta vacía</div>}
+                        </div>
+                    </>
+                )}
               </div>
             )}
 
-            {/* DETALLE CARRERA */}
+            {/* VISTA DETALLE CARRERA */}
             {selectedCareer && (
               <div className="p-10 w-full animate-in fade-in duration-700 space-y-8 overflow-y-auto">
                 <div className="text-center pb-8 border-b border-slate-800">
@@ -822,11 +864,10 @@ export default function KennedyView() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
-      </div> 
       )}
-
     </div>
   );
 }
